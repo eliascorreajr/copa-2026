@@ -3,83 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bolão Quinta Categoria Show - Login</title>
+  <title>Quinta Categoria Show - Bolão Copa do Mundo 2026</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
-  <div class="login-container">
-    <div class="login-card animate-fade-in">
-      <img src="img/quinta-categoria-show-logo.jpg" alt="Quinta categoria Show" class="logo">
-      <h1>QUINTA CATEGORIA SHOW</h1>
-      <p>Bolão Copa do Mundo 2026</p>
+  <div class="landing-container">
+    <div class="landing-card animate-fade-in">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Quinta Categoria Show" class="landing-logo">
 
-      <form id="login-form">
-        <div class="form-group">
-          <label for="email">E-mail</label>
-          <input type="email" id="email" placeholder="seu@email.com" required autocomplete="email">
+      <h1 class="landing-title">QUINTA CATEGORIA SHOW</h1>
+      <h2 class="landing-subtitle">Bolão Copa do Mundo 2026</h2>
+
+      <div class="landing-description">
+        <p>Bem-vindo ao bolão oficial do <strong>Grupo Discípulos de Pai Mei</strong>, que originou o lendário <strong>Quinta Categoria Show</strong>!</p>
+        <p>Aqui a rivalidade é séria, as polêmicas são garantidas e quem erra o placar paga o pato. Faça seus palpites, acompanhe o ranking e mostre que você entende de bola — ou sofra as consequências.</p>
+      </div>
+
+      <div class="landing-rules">
+        <h3>Regras de Pontuação</h3>
+        <div class="rules-grid">
+          <div class="rule-card rule-exact">
+            <div class="rule-icon">🎯</div>
+            <div class="rule-label">Placar Exato</div>
+            <div class="rule-points">+7 pontos</div>
+            <div class="rule-desc">Acertou o placar certinho? É muito bola.</div>
+          </div>
+          <div class="rule-card rule-correct">
+            <div class="rule-icon">✓</div>
+            <div class="rule-label">Resultado Correto</div>
+            <div class="rule-points">+3 pontos</div>
+            <div class="rule-desc">Não acertou o placar, mas matou quem ganhou. Média.</div>
+          </div>
+          <div class="rule-card rule-wrong">
+            <div class="rule-icon">✗</div>
+            <div class="rule-label">Resultado Errado</div>
+            <div class="rule-points">-1 ponto</div>
+            <div class="rule-desc">Errou de vez? Toma essa. Quinta categoria!</div>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="password">Senha</label>
-          <input type="password" id="password" placeholder="Sua senha" required autocomplete="current-password">
-        </div>
-        <div id="login-error" class="error-message" style="display:block;"></div>
-        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px;" id="btn-login">
-          Entrar
-        </button>
-      </form>
+      </div>
+
+      <div class="landing-info">
+        <p>Os palpites travam <strong>30 minutos antes</strong> de cada jogo. Depois disso, é só torcer.</p>
+      </div>
+
+      <a href="login.html" class="btn btn-primary landing-btn">Entrar no Bolão</a>
     </div>
   </div>
 
-  <script type="module">
-    import { auth, db, signInWithEmailAndPassword } from "./js/auth.js";
-    import { getDoc, doc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-
-    const form = document.getElementById("login-form");
-    const errorDiv = document.getElementById("login-error");
-    const btnLogin = document.getElementById("btn-login");
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      errorDiv.style.display = "none";
-
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
-
-      btnLogin.disabled = true;
-      btnLogin.textContent = "Entrando...";
-
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          const profile = userDoc.data();
-          if (!profile.firstName || !profile.lastName) {
-            window.location.href = "primeiro-acesso.html";
-          } else if (email === "admin@bolao.com") {
-            window.location.href = "admin.html";
-          } else {
-            window.location.href = "palpites.html";
-          }
-        } else {
-          window.location.href = "primeiro-acesso.html";
-        }
-      } catch (error) {
-        let msg = "Erro ao fazer login.";
-        if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
-          msg = "E-mail ou senha incorretos.";
-        } else if (error.code === "auth/too-many-requests") {
-          msg = "Muitas tentativas. Tente novamente mais tarde.";
-        }
-        errorDiv.textContent = msg;
-        errorDiv.style.display = "block";
-      } finally {
-        btnLogin.disabled = false;
-        btnLogin.textContent = "Entrar";
-      }
-    });
-  </script>
+  <div class="footer" style="margin-top:0;">
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026 &mdash; Grupo Discípulos de Pai Mei
+  </div>
 </body>
 </html>

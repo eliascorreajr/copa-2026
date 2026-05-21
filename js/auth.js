@@ -59,7 +59,7 @@ export function checkAuth(requiredRole) {
   return new Promise((resolve) => {
     onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        window.location.href = "index.html";
+window.location.href = "login.html";
         return;
       }
 
@@ -107,7 +107,7 @@ export function setupNavbar(profile) {
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async () => {
       await signOut(auth);
-      window.location.href = "index.html";
+      window.location.href = "login.html";
     });
   }
 
