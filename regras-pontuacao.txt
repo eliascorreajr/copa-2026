@@ -1,0 +1,90 @@
+REGRA DE PONTUACAO - Bolao Quinta Categoria Show - Copa 2026
+================================================================
+
+PONTUACAO
+---------
+| Situacao              | Pontos |
+|-----------------------|--------|
+| Placar exato          | +7     |
+| Resultado correto     | +3     |
+| Resultado errado      | -1     |
+
+- Aplica-se a todas as fases (grupos e mata-mata).
+- A pontuacao pode ficar negativa.
+
+
+LOGICA DE CATEGORIZACAO
+-----------------------
+1. PLACAR EXATO (+7): palpite IDENTICO ao resultado oficial.
+   - Exemplo: palpite 2x1, resultado 2x1
+
+2. RESULTADO CORRETO (+3): acertou QUEM ganhou (ou se foi empate),
+   mas errou os gols.
+   - Exemplo: palpite 3x1, resultado 2x1 (ambos mandante vence)
+   - Exemplo: palpite 0x0, resultado 1x1 (ambos empate)
+
+3. RESULTADO ERRADO (-1): errou o resultado da partida.
+   - Exemplo: palpite 2x1, resultado 1x2 (mandante x visitante)
+   - Exemplo: palpite 2x1, resultado 0x0 (vitoria x empate)
+   - Exemplo: palpite 0x0, resultado 2x1 (empate x vitoria)
+
+
+ALGORITMO (JavaScript)
+-----------------------
+function calculateScore(guessHome, guessAway, resultHome, resultAway) {
+  // Placar exato
+  if (guessHome === resultHome && guessAway === resultAway) {
+    return +7 (exact);
+  }
+
+  // Determina tipo de resultado
+  guessResult = guessHome > guessAway ? "home"
+              : guessHome < guessAway ? "away"
+              : "draw";
+
+  resultResult = resultHome > resultAway ? "home"
+               : resultHome < resultAway ? "away"
+               : "draw";
+
+  // Resultado correto
+  if (guessResult === resultResult) {
+    return +3 (correct);
+  }
+
+  // Resultado errado
+  return -1 (wrong);
+}
+
+
+TABELA DE EXEMPLOS COMPLETA
+----------------------------
+| Palpite | Resultado | Tipo          | Pontos |
+|---------|-----------|---------------|--------|
+| 2x1     | 2x1       | Exato         | +7     |
+| 1x0     | 1x0       | Exato         | +7     |
+| 0x0     | 0x0       | Exato         | +7     |
+| 3x2     | 2x1       | Correto       | +3     |
+| 1x0     | 2x1       | Correto       | +3     |
+| 5x0     | 2x1       | Correto       | +3     |
+| 0x0     | 1x1       | Correto       | +3     |
+| 2x2     | 0x0       | Correto       | +3     |
+| 2x1     | 1x2       | Errado        | -1     |
+| 2x1     | 0x0       | Errado        | -1     |
+| 0x0     | 2x1       | Errado        | -1     |
+| 2x1     | 0x3       | Errado        | -1     |
+
+
+REGRA DE TRAVAMENTO
+-------------------
+- Palpites travam 30 minutos antes do primeiro jogo de cada dia.
+- Enquanto a rodada estiver aberta, o usuario pode alterar palpites.
+- Apos o travamento, nenhuma alteracao e permitida.
+
+
+CONSISTENCIA NO CODIGO
+----------------------
+Os valores (+7, +3, -1) estao definidos consistentemente em:
+- js/scoring.js (motor de pontuacao)
+- ranking.html (calcula ranking)
+- historico.html (calcula historico pessoal)
+- admin.html (exportacao CSV)

@@ -140,9 +140,38 @@
     </div>
   </div>
 
+  <!-- Edit User Modal -->
+  <div class="modal-overlay" id="edit-user-modal" style="display:none;">
+    <div class="modal-content">
+      <h3>Editar Usuário</h3>
+      <input type="hidden" id="edit-user-uid">
+      <div class="form-group">
+        <label for="edit-user-nickname">Apelido</label>
+        <input type="text" id="edit-user-nickname" placeholder="Apelido do participante">
+      </div>
+      <div class="form-group">
+        <label for="edit-user-email">E-mail</label>
+        <input type="email" id="edit-user-email" placeholder="email@bolao.com">
+      </div>
+      <div class="form-group">
+        <label for="edit-user-firstname">Nome</label>
+        <input type="text" id="edit-user-firstname" placeholder="Primeiro nome">
+      </div>
+      <div class="form-group">
+        <label for="edit-user-lastname">Sobrenome</label>
+        <input type="text" id="edit-user-lastname" placeholder="Sobrenome">
+      </div>
+      <small style="color:var(--accent-orange);display:block;margin-bottom:16px;">Altere o e-mail aqui para atualizar o perfil no Firestore. O e-mail de login no Firebase Auth deve ser alterado manualmente no Firebase Console.</small>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-edit-user">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirm-edit-user">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { auth, db, checkAuth, setupNavbar, showToast, isAdmin } from "./js/auth.js?v=6";
-    import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
     import { syncAllResults } from "./js/sofascore.js?v=6";
 
@@ -255,7 +284,10 @@
               ${u.email === "whiteglauber@bolao.com" ? '<span style="color:var(--accent-orange);font-size:12px;margin-left:8px;">[CONVIDADO]</span>' : ""}
             </div>
             <div style="color:var(--text-tertiary);font-size:13px;">${u.email}</div>
-            ${!isAdminUser ? `<button class="btn btn-danger btn-sm" data-delete-user="${d.id}" data-user-email="${u.email}" style="padding:4px 10px;font-size:12px;">Remover</button>` : ""}
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-secondary btn-sm" data-edit-user="${d.id}" style="padding:4px 10px;font-size:12px;">Editar</button>
+              ${!isAdminUser ? `<button class="btn btn-danger btn-sm" data-delete-user="${d.id}" data-user-email="${u.email}" style="padding:4px 10px;font-size:12px;">Remover</button>` : ""}
+            </div>
           </div>`;
         });
         container.innerHTML = html || '<p style="color:var(--text-tertiary);">Nenhum usuário encontrado.</p>';
@@ -280,6 +312,26 @@
               } catch (e) {
                 showToast("Erro ao remover: " + e.message, "error");
               }
+            }
+          });
+        });
+
+        container.querySelectorAll("[data-edit-user]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const uid = btn.dataset.editUser;
+            try {
+              const userDoc = await getDoc(doc(db, "users", uid));
+              if (userDoc.exists()) {
+                const data = userDoc.data();
+                document.getElementById("edit-user-uid").value = uid;
+                document.getElementById("edit-user-nickname").value = data.nickname || "";
+                document.getElementById("edit-user-email").value = data.email || "";
+                document.getElementById("edit-user-firstname").value = data.firstName || "";
+                document.getElementById("edit-user-lastname").value = data.lastName || "";
+                document.getElementById("edit-user-modal").style.display = "flex";
+              }
+            } catch (e) {
+              showToast("Erro ao carregar dados do usuário: " + e.message, "error");
             }
           });
         });
@@ -540,6 +592,43 @@
         await addLog("EXPORTAÇÃO EXCEL", "Exportação de palpites em CSV");
       } catch (e) {
         showToast("Erro na exportação: " + e.message, "error");
+      }
+    });
+
+    // Edit User Modal
+    document.getElementById("btn-cancel-edit-user").addEventListener("click", () => {
+      document.getElementById("edit-user-modal").style.display = "none";
+    });
+
+    document.getElementById("btn-confirm-edit-user").addEventListener("click", async () => {
+      const uid = document.getElementById("edit-user-uid").value;
+      const nickname = document.getElementById("edit-user-nickname").value.trim();
+      const email = document.getElementById("edit-user-email").value.trim();
+      const firstName = document.getElementById("edit-user-firstname").value.trim();
+      const lastName = document.getElementById("edit-user-lastname").value.trim();
+
+      if (!nickname || !email) {
+        showToast("Apelido e e-mail são obrigatórios.", "warning");
+        return;
+      }
+
+      try {
+        const updateData = {
+          nickname,
+          email,
+          firstName,
+          lastName,
+          displayName: `${nickname} - vulgo ${firstName} ${lastName}`
+        };
+
+        await updateDoc(doc(db, "users", uid), updateData);
+
+        showToast(`Usuário ${nickname} atualizado!`, "success");
+        await addLog("USUÁRIO EDITADO", `${nickname} (${email})`);
+        document.getElementById("edit-user-modal").style.display = "none";
+        loadUsers();
+      } catch (e) {
+        showToast("Erro ao atualizar usuário: " + e.message, "error");
       }
     });
 
