@@ -636,7 +636,7 @@
           btn.disabled = true;
           btn.textContent = "Migrando...";
 
-          const tempPassword = Math.random().toString(36).slice(2, 10);
+const tempPassword = Math.random().toString(36).slice(2, 10);
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
           const newUid = newUserCredential.user.uid;
 
@@ -668,11 +668,31 @@
 
           await addLog("USUÁRIO MIGRADO", `${originalEmail} (${uid}) → ${email} (${newUid}). ${migratePromises.length} palpite(s) migrado(s).`);
 
-          showToast(`Usuário migrado! Novo login: ${email} — Senha temporária: ${tempPassword}`, "success");
-
           document.getElementById("edit-user-modal").style.display = "none";
           btn.disabled = false;
           btn.textContent = "Salvar";
+
+          const migrationModal = document.createElement("div");
+          migrationModal.className = "modal-overlay";
+          migrationModal.style.display = "flex";
+          migrationModal.innerHTML = `<div class="modal-content">
+            <h3>Usuário Migrado com Sucesso!</h3>
+            <div style="text-align:left;margin:16px 0;padding:16px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--bg-tertiary);">
+              <p style="margin-bottom:8px;"><strong>Apelido:</strong> ${nickname}</p>
+              <p style="margin-bottom:8px;"><strong>Novo e-mail:</strong> ${email}</p>
+              <p style="margin-bottom:8px;"><strong>Senha temporária:</strong> <span style="font-family:var(--font-heading);font-size:18px;color:var(--accent-orange);">${tempPassword}</span></p>
+              <p style="margin-bottom:0;font-size:13px;color:var(--text-tertiary);">Palpites migrados: ${migratePromises.length}</p>
+            </div>
+            <small style="color:var(--accent-orange);display:block;margin-bottom:16px;">Anote a senha temporária e envie ao participante. Ele deve fazer login com o novo e-mail e trocar a senha no Perfil. A conta antiga (${originalEmail}) deve ser excluída no Firebase Console → Authentication.</small>
+            <div class="modal-actions">
+              <button class="btn btn-primary" id="btn-close-migration">Entendi</button>
+            </div>
+          </div>`;
+          document.body.appendChild(migrationModal);
+          document.getElementById("btn-close-migration").addEventListener("click", () => {
+            migrationModal.remove();
+          });
+
           loadUsers();
         } else {
           const updateData = {
