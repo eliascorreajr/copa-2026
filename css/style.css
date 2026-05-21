@@ -848,6 +848,24 @@ a:hover {
   color: var(--text-primary);
 }
 
+.round-tabs button.tab-locked {
+  color: var(--accent-red);
+  opacity: 0.6;
+}
+
+.round-tabs button.tab-locked::after {
+  content: ' 🔒';
+  font-size: 10px;
+}
+
+.round-tabs button.tab-open {
+  color: var(--success);
+}
+
+.card.match-has-guess {
+  border-color: var(--success);
+}
+
 /* Countdown timer */
 .countdown {
   font-family: var(--font-heading);

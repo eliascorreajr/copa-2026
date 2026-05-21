@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Palpites - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=5">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -39,7 +39,7 @@
   </div>
 
   <div class="footer">
-    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026 &mdash; Grupo Discípulos de Pai Mei
   </div>
 
   <!-- Confirmation Modal -->
@@ -55,177 +55,159 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, showToast, formatDate } from "./js/auth.js?v=4";
-    import { getDoc, doc, setDoc, onSnapshot, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { auth, db, checkAuth, setupNavbar, showToast, formatDate } from "./js/auth.js?v=5";
+    import { getDoc, doc, setDoc, deleteDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
     let currentUser = null;
     let currentProfile = null;
     let matchesData = [];
-    let currentRound = 1;
-    let matchLockStatus = {};
+    let userGuesses = {};
+    let currentDay = null;
+
+    const LOCK_MINUTES = 30;
+    const OPEN_HOUR = 6;
 
     async function init() {
       const { user, profile } = await checkAuth();
       currentUser = user;
       currentProfile = profile;
       setupNavbar(profile);
-      await loadMatches();
-      await setupRoundTabs();
+      await loadData();
+      setupDayTabs();
       renderMatches();
     }
 
-    async function loadMatches() {
+    async function loadData() {
       try {
         const response = await fetch("data/matches.json");
-        const data = await response.json();
-        matchesData = data;
+        matchesData = await response.json();
 
-        const guessSnap = await getDocs(collection(db, "guesses"));
-        const guesses = {};
-        guessSnap.forEach(d => { guesses[d.id] = d.data(); });
-
-        const matchSnap = await getDocs(collection(db, "matches"));
-        matchSnap.forEach(d => {
-          const md = d.data();
-          matchLockStatus[d.id] = md;
+        const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", currentUser.uid)));
+        userGuesses = {};
+        guessSnap.forEach(d => {
+          const data = d.data();
+          userGuesses[data.matchId] = data;
         });
-
       } catch (e) {
         showToast("Erro ao carregar jogos", "error");
       }
     }
 
-    function getAllRounds() {
-      const rounds = new Set();
-      matchesData.groupMatches.forEach(m => rounds.add(m.round));
-      return [
-        ...Array.from(rounds).sort().map(r => ({ value: r, label: `Rodada ${r}` })),
-        { value: "round-of-32", label: "Fase de 32" },
-        { value: "round-of-16", label: "Oitavas" },
-        { value: "quarterfinals", label: "Quartas" },
-        { value: "semifinals", label: "Semis" },
-        { value: "third-place", label: "3º Lugar" },
-        { value: "final", label: "Final" }
-      ];
+    function getDayKey(dateStr) {
+      const d = new Date(dateStr);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
-    async function setupRoundTabs() {
+    function formatDayLabel(dayKey) {
+      const [y, m, d] = dayKey.split('-');
+      const date = new Date(y, m - 1, d);
+      const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      return `${weekdays[date.getDay()]} ${d}/${m}`;
+    }
+
+    function getAllDays() {
+      const days = new Map();
+      const allMatches = [...matchesData.groupMatches, ...matchesData.knockoutMatches];
+      allMatches.forEach(m => {
+        const key = getDayKey(m.date);
+        if (!days.has(key)) days.set(key, []);
+        days.get(key).push(m);
+      });
+      const sorted = Array.from(days.keys()).sort();
+      const result = [];
+      for (const day of sorted) {
+        const matches = days.get(day);
+        result.push({
+          value: day,
+          label: formatDayLabel(day),
+          matches: matches,
+          stage: matches[0].stage || matches[0].group
+        });
+      }
+      return result;
+    }
+
+    function getMatchesForDay(dayKey) {
+      const allMatches = [...matchesData.groupMatches, ...matchesData.knockoutMatches];
+      return allMatches.filter(m => getDayKey(m.date) === dayKey);
+    }
+
+    function isDayLocked(dayKey) {
+      const matches = getMatchesForDay(dayKey);
+      if (matches.length === 0) return true;
+      const earliestDate = Math.min(...matches.map(m => new Date(m.date).getTime()));
+      const lockTime = earliestDate - LOCK_MINUTES * 60 * 1000;
+      return Date.now() >= lockTime;
+    }
+
+    function isDayOpen(dayKey) {
+      const matches = getMatchesForDay(dayKey);
+      if (matches.length === 0) return false;
+      const earliestDate = Math.min(...matches.map(m => new Date(m.date).getTime()));
+      const matchDate = new Date(earliestDate);
+      const dayBefore = new Date(dayKey + 'T00:00:00');
+      const openTime = new Date(dayBefore.getTime() + OPEN_HOUR * 60 * 60 * 1000);
+      return Date.now() >= openTime.getTime();
+    }
+
+    function getLockCountdown(dayKey) {
+      const matches = getMatchesForDay(dayKey);
+      if (matches.length === 0) return null;
+      const earliestDate = Math.min(...matches.map(m => new Date(m.date).getTime()));
+      const lockTime = earliestDate - LOCK_MINUTES * 60 * 1000;
+      const diff = lockTime - Date.now();
+      if (diff <= 0) return null;
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+      let str = '';
+      if (days > 0) str += `${days}d `;
+      str += `${hours}h ${mins}m ${secs}s`;
+      return str;
+    }
+
+    function setupDayTabs() {
       const tabs = document.getElementById("round-tabs");
-      const rounds = getAllRounds();
-      rounds.forEach((r, i) => {
+      const days = getAllDays();
+      const now = Date.now();
+      let firstOpenIdx = -1;
+
+      days.forEach((day, i) => {
         const btn = document.createElement("button");
-        btn.textContent = r.label;
-        btn.dataset.round = r.value;
-        if (i === 0) btn.classList.add("active");
+        btn.textContent = day.label;
+        btn.dataset.day = day.value;
+
+        const locked = isDayLocked(day.value);
+        const open = isDayOpen(day.value);
+
+        if (locked) {
+          btn.classList.add("tab-locked");
+        } else if (open) {
+          btn.classList.add("tab-open");
+          if (firstOpenIdx === -1) firstOpenIdx = i;
+        } else {
+          btn.classList.add("tab-future");
+        }
+
+        if (i === 0 || (firstOpenIdx === i)) btn.classList.add("active");
+
         btn.addEventListener("click", () => {
           tabs.querySelectorAll("button").forEach(b => b.classList.remove("active"));
           btn.classList.add("active");
-          currentRound = r.value;
+          currentDay = day.value;
           renderMatches();
         });
+
         tabs.appendChild(btn);
       });
-    }
 
-    function isLocked(round) {
-      const now = new Date();
-      const matches = getMatchesForRound(round);
-      if (matches.length === 0) return false;
-      const firstMatch = matches.reduce((earliest, m) => {
-        const d = new Date(m.date);
-        return d < earliest ? d : earliest;
-      }, new Date(matches[0].date));
-      const lockTime = new Date(firstMatch.getTime() - 30 * 60 * 1000);
-      return now >= lockTime;
-    }
+      currentDay = days[firstOpenIdx >= 0 ? firstOpenIdx : 0].value;
 
-    function getCountdown(round) {
-      const now = new Date();
-      const matches = getMatchesForRound(round);
-      if (matches.length === 0) return null;
-      const firstMatch = matches.reduce((earliest, m) => {
-        const d = new Date(m.date);
-        return d < earliest ? d : earliest;
-      }, new Date(matches[0].date));
-      const lockTime = new Date(firstMatch.getTime() - 30 * 60 * 1000);
-      const diff = lockTime - now;
-      if (diff <= 0) return null;
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diff % (1000 * 60)) / 1000);
-      return `${hours}h ${mins}m ${secs}s`;
-    }
-
-    function getMatchesForRound(round) {
-      if (typeof round === "number") {
-        return matchesData.groupMatches.filter(m => m.round === round);
-      }
-      return matchesData.knockoutMatches.filter(m => m.stage === round);
-    }
-
-    function renderMatches() {
-      const container = document.getElementById("matches-container");
-      const matches = getMatchesForRound(currentRound);
-      const locked = isLocked(currentRound);
-      const countdown = getCountdown(currentRound);
-
-      let html = "";
-
-      if (countdown) {
-        html += `<div style="text-align:center;margin-bottom:16px;">
-          <span style="color:var(--text-tertiary);font-size:13px;">Trava em:</span>
-          <span class="countdown" id="countdown-timer">${countdown}</span>
-        </div>`;
-      }
-
-      if (locked) {
-        html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(212,57,28,0.15);border-radius:8px;color:var(--accent-red);font-weight:600;">🔒 Palpites travados para esta rodada</div>`;
-      }
-
-      if (matches.length === 0) {
-        html += `<p style="text-align:center;color:var(--text-tertiary);">Nenhum jogo disponível para esta rodada.</p>`;
-      }
-
-      matches.forEach(m => {
-        const matchLocked = locked;
-        const matchDate = formatDate(m.date);
-        const isGroup = typeof currentRound === "number";
-        const groupLabel = isGroup ? `Grupo ${m.group}` : stageLabel(m.stage);
-
-        html += `<div class="card match-card ${matchLocked ? 'match-locked' : ''} animate-fade-in">
-          <div class="match-header">
-            <span class="match-group-badge">${groupLabel}</span>
-            <span style="color:var(--text-tertiary);font-size:12px;">${matchDate}</span>
-          </div>
-          <div class="match-teams">
-            <div style="flex:1;text-align:center;">
-              <div class="team-name">${m.homeTeam}</div>
-            </div>
-            <div class="score-input" data-match-id="${m.id}">
-              <input type="number" min="0" max="30" value="" placeholder="-" ${matchLocked ? 'disabled' : ''} class="home-score" data-match="${m.id}">
-              <span class="vs">x</span>
-              <input type="number" min="0" max="30" value="" placeholder="-" ${matchLocked ? 'disabled' : ''} class="away-score" data-match="${m.id}">
-            </div>
-            <div style="flex:1;text-align:center;">
-              <div class="team-name">${m.awayTeam}</div>
-            </div>
-          </div>
-        </div>`;
-      });
-
-      if (!locked && matches.length > 0) {
-        html += `<div style="text-align:center;margin-top:24px;">
-          <button class="btn btn-primary" id="btn-save-all">Salvar Palpites</button>
-        </div>`;
-      }
-
-      container.innerHTML = html;
-
-      if (!locked && matches.length > 0) {
-        const saveBtn = document.getElementById("btn-save-all");
-        if (saveBtn) {
-          saveBtn.addEventListener("click", handleSaveAll);
-        }
+      const activeBtn = tabs.querySelector(`[data-day="${currentDay}"]`);
+      if (activeBtn) {
+        tabs.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        activeBtn.classList.add("active");
       }
     }
 
@@ -241,8 +223,104 @@
       return labels[stage] || stage;
     }
 
+    function renderMatches() {
+      const container = document.getElementById("matches-container");
+      if (!currentDay) {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);">Selecione um dia.</p>';
+        return;
+      }
+
+      const matches = getMatchesForDay(currentDay);
+      const locked = isDayLocked(currentDay);
+      const open = isDayOpen(currentDay);
+      const countdown = getLockCountdown(currentDay);
+
+      let html = "";
+
+      if (!open && !locked) {
+        const dayDate = new Date(currentDay + 'T00:00:00');
+        const openTime = new Date(dayDate.getTime() + OPEN_HOUR * 60 * 60 * 1000);
+        const openLabel = openTime.toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        html += `<div style="text-align:center;margin-bottom:16px;padding:16px;background:rgba(244,124,32,0.1);border-radius:8px;">
+          <span style="font-size:14px;">⏰ Palpites abrem às <strong>${openLabel}</strong> do dia desta rodada</span>
+        </div>`;
+        matches.forEach(m => {
+          const groupLabel = m.group ? `Grupo ${m.group}` : stageLabel(m.stage);
+          html += `<div class="card match-card match-locked animate-fade-in">
+            <div class="match-header">
+              <span class="match-group-badge">${groupLabel}</span>
+              <span style="color:var(--text-tertiary);font-size:12px;">${formatDate(m.date)}</span>
+            </div>
+            <div class="match-teams">
+              <div style="flex:1;text-align:center;"><div class="team-name">${m.homeTeam}</div></div>
+              <div class="score-input"><span class="vs">x</span></div>
+              <div style="flex:1;text-align:center;"><div class="team-name">${m.awayTeam}</div></div>
+            </div>
+          </div>`;
+        });
+        container.innerHTML = html;
+        return;
+      }
+
+      if (countdown) {
+        html += `<div style="text-align:center;margin-bottom:16px;">
+          <span style="color:var(--text-tertiary);font-size:13px;">Trava em:</span>
+          <span class="countdown">${countdown}</span>
+        </div>`;
+      }
+
+      if (locked) {
+        html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(212,57,28,0.15);border-radius:8px;color:var(--accent-red);font-weight:600;">🔒 Palpites travados para esta rodada</div>`;
+      }
+
+      matches.forEach(m => {
+        const existing = userGuesses[m.id];
+        const groupLabel = m.group ? `Grupo ${m.group}` : stageLabel(m.stage);
+        const homeVal = existing ? existing.homeScore : '';
+        const awayVal = existing ? existing.awayScore : '';
+
+        html += `<div class="card match-card ${locked ? 'match-locked' : ''} ${existing ? 'match-has-guess' : ''} animate-fade-in">
+          <div class="match-header">
+            <span class="match-group-badge">${groupLabel}</span>
+            <span style="color:var(--text-tertiary);font-size:12px;">${formatDate(m.date)}</span>
+            ${existing && !locked ? '<span style="color:var(--success);font-size:11px;font-weight:600;">✓ Salvo</span>' : ''}
+          </div>
+          <div class="match-teams">
+            <div style="flex:1;text-align:center;">
+              <div class="team-name">${m.homeTeam}</div>
+            </div>
+            <div class="score-input" data-match-id="${m.id}">
+              <input type="number" min="0" max="30" value="${homeVal}" placeholder="-" ${locked ? 'disabled' : ''} class="home-score" data-match="${m.id}">
+              <span class="vs">x</span>
+              <input type="number" min="0" max="30" value="${awayVal}" placeholder="-" ${locked ? 'disabled' : ''} class="away-score" data-match="${m.id}">
+            </div>
+            <div style="flex:1;text-align:center;">
+              <div class="team-name">${m.awayTeam}</div>
+            </div>
+          </div>
+        </div>`;
+      });
+
+      if (!locked && matches.length > 0) {
+        html += `<div style="text-align:center;margin-top:24px;">
+          <button class="btn btn-primary" id="btn-save-all">Salvar Palpites</button>
+          ${Object.keys(userGuesses).length > 0 ? '<button class="btn btn-secondary" id="btn-clear-guesses" style="margin-left:8px;">Limpar Meus Palpites desta Rodada</button>' : ''}
+        </div>`;
+      }
+
+      container.innerHTML = html;
+
+      if (!locked && matches.length > 0) {
+        const saveBtn = document.getElementById("btn-save-all");
+        if (saveBtn) saveBtn.addEventListener("click", handleSaveAll);
+
+        const clearBtn = document.getElementById("btn-clear-guesses");
+        if (clearBtn) clearBtn.addEventListener("click", handleClearGuesses);
+      }
+    }
+
     async function handleSaveAll() {
-      const matches = getMatchesForRound(currentRound);
+      const matches = getMatchesForDay(currentDay);
       const guesses = [];
       let hasEmpty = false;
 
@@ -262,8 +340,7 @@
               homeScore: parseInt(homeScore),
               awayScore: parseInt(awayScore),
               homeTeam: m.homeTeam,
-              awayTeam: m.awayTeam,
-              locked: true
+              awayTeam: m.awayTeam
             });
           }
         }
@@ -281,7 +358,7 @@
 
       const modal = document.getElementById("confirm-modal");
       const textEl = document.getElementById("confirm-modal-text");
-      textEl.innerHTML = `Você está prestes a confirmar <strong>${guesses.length}</strong> palpite(s).<br>Palpites confirmados <strong>não podem ser alterados</strong>.<br><br>Confirma?`;
+      textEl.innerHTML = `Você está prestes a confirmar <strong>${guesses.length}</strong> palpite(s).<br>Você pode alterar seus palpites enquanto a rodada estiver aberta.<br><br>Confirma?`;
       modal.style.display = "flex";
 
       document.getElementById("btn-confirm-guess").onclick = async () => {
@@ -296,13 +373,54 @@
               homeScore: g.homeScore,
               awayScore: g.awayScore,
               locked: true,
-              createdAt: new Date().toISOString()
-            });
+              createdAt: userGuesses[g.matchId]?.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+            userGuesses[g.matchId] = {
+              userId: currentUser.uid,
+              matchId: g.matchId,
+              homeTeam: g.homeTeam,
+              awayTeam: g.awayTeam,
+              homeScore: g.homeScore,
+              awayScore: g.awayScore,
+              locked: true,
+              createdAt: userGuesses[g.matchId]?.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
           }
-          showToast("Palpites salvos com sucesso!", "success");
+          showToast("Palpites salvos! Você pode alterar enquanto a rodada estiver aberta.", "success");
           renderMatches();
         } catch (e) {
           showToast("Erro ao salvar palpites: " + e.message, "error");
+        }
+      };
+
+      document.getElementById("btn-cancel-guess").onclick = () => {
+        modal.style.display = "none";
+      };
+    }
+
+    async function handleClearGuesses() {
+      const matches = getMatchesForDay(currentDay);
+      const modal = document.getElementById("confirm-modal");
+      const textEl = document.getElementById("confirm-modal-text");
+      textEl.innerHTML = `Tem certeza que deseja <strong>limpar</strong> seus palpites desta rodada?<br>Você poderá preencher novamente depois.`;
+      modal.style.display = "flex";
+
+      document.getElementById("btn-confirm-guess").onclick = async () => {
+        modal.style.display = "none";
+        try {
+          for (const m of matches) {
+            const guessId = `${currentUser.uid}_match_${m.id}`;
+            if (userGuesses[m.id]) {
+              await deleteDoc(doc(db, "guesses", guessId));
+              delete userGuesses[m.id];
+            }
+          }
+          showToast("Palpites limpos com sucesso!", "success");
+          renderMatches();
+        } catch (e) {
+          showToast("Erro ao limpar palpites: " + e.message, "error");
         }
       };
 
