@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bolão Quinta Categoria Show - Login</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card animate-fade-in">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Quinta categoria Show" class="logo">
+      <h1>QUINTA CATEGORIA SHOW</h1>
+      <p>Bolão Copa do Mundo 2026</p>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" placeholder="seu@email.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Senha</label>
+          <input type="password" id="password" placeholder="Sua senha" required autocomplete="current-password">
+        </div>
+        <div id="login-error" class="error-message" style="display:block;"></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px;" id="btn-login">
+          Entrar
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db, signInWithEmailAndPassword } from "./js/auth.js";
+    import { getDoc, doc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+    const form = document.getElementById("login-form");
+    const errorDiv = document.getElementById("login-error");
+    const btnLogin = document.getElementById("btn-login");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorDiv.style.display = "none";
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      btnLogin.disabled = true;
+      btnLogin.textContent = "Entrando...";
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const profile = userDoc.data();
+          if (!profile.firstName || !profile.lastName) {
+            window.location.href = "primeiro-acesso.html";
+          } else if (email === "admin@bolao.com") {
+            window.location.href = "admin.html";
+          } else {
+            window.location.href = "palpites.html";
+          }
+        } else {
+          window.location.href = "primeiro-acesso.html";
+        }
+      } catch (error) {
+        let msg = "Erro ao fazer login.";
+        if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+          msg = "E-mail ou senha incorretos.";
+        } else if (error.code === "auth/too-many-requests") {
+          msg = "Muitas tentativas. Tente novamente mais tarde.";
+        }
+        errorDiv.textContent = msg;
+        errorDiv.style.display = "block";
+      } finally {
+        btnLogin.disabled = false;
+        btnLogin.textContent = "Entrar";
+      }
+    });
+  </script>
+</body>
+</html>

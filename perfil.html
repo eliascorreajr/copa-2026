@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perfil - Bolão Quinta Categoria Show</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="palpites.html" class="navbar-logo">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Logo">
+      <span>QCS BOLÃO</span>
+    </a>
+    <button class="hamburger" id="hamburger">☰</button>
+    <div class="navbar-links" id="nav-links">
+      <a href="palpites.html">Palpites</a>
+      <a href="ranking.html">Ranking</a>
+      <a href="perfil.html" class="active">Perfil</a>
+      <a href="admin.html" id="nav-admin" style="display:none;">Admin</a>
+      <a href="#" id="btn-logout">Sair</a>
+    </div>
+    <div class="navbar-user" id="navbar-user"></div>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title">MEU PERFIL</h1>
+
+    <div class="card" style="max-width:500px;margin:0 auto;">
+      <div class="profile-header" id="profile-header">
+        <div class="profile-placeholder" id="profile-avatar">👤</div>
+        <div>
+          <h2 id="profile-nickname" style="color:var(--accent-orange);"></h2>
+          <p id="profile-fullname" style="color:var(--text-secondary);"></p>
+          <p id="profile-email" style="color:var(--text-tertiary);font-size:13px;"></p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Alterar Foto de Perfil</label>
+        <input type="file" id="photoInput" accept="image/*" style="display:none;">
+        <button class="btn btn-secondary" style="width:100%;" id="btn-change-photo">Escolher Nova Foto</button>
+      </div>
+
+      <div class="form-group">
+        <label for="newPassword">Nova Senha</label>
+        <input type="password" id="newPassword" placeholder="Nova senha (mín. 6 caracteres)" minlength="6">
+      </div>
+      <div class="form-group">
+        <label for="confirmPassword">Confirmar Nova Senha</label>
+        <input type="password" id="confirmPassword" placeholder="Repita a nova senha">
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;" id="btn-update">Atualizar Perfil</button>
+      <div id="profile-message" style="margin-top:12px;text-align:center;font-size:13px;"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026
+  </div>
+
+  <script type="module">
+    import { auth, db, checkAuth, setupNavbar, showToast, fileToBase64, compressPhoto } from "./js/auth.js";
+    import { updateDoc, doc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { updatePassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+
+    let currentUser;
+    let currentProfile;
+
+    async function init() {
+      const { user, profile } = await checkAuth();
+      currentUser = user;
+      currentProfile = profile;
+      setupNavbar(profile);
+      renderProfile();
+    }
+
+    function renderProfile() {
+      const nicknameEl = document.getElementById("profile-nickname");
+      const fullnameEl = document.getElementById("profile-fullname");
+      const emailEl = document.getElementById("profile-email");
+      const avatarEl = document.getElementById("profile-avatar");
+
+      nicknameEl.textContent = currentProfile.nickname || currentUser.email;
+      fullnameEl.textContent = currentProfile.firstName ? `${currentProfile.firstName} ${currentProfile.lastName || ""}` : "";
+      emailEl.textContent = currentUser.email;
+
+      if (currentProfile.photoURL) {
+        avatarEl.outerHTML = `<img id="profile-avatar" src="${currentProfile.photoURL}" class="profile-avatar" alt="Foto de perfil">`;
+      }
+    }
+
+    document.getElementById("btn-change-photo").addEventListener("click", () => {
+      document.getElementById("photoInput").click();
+    });
+
+    document.getElementById("photoInput").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const base64 = await fileToBase64(file);
+        const photoURL = await compressPhoto(base64, 200);
+
+        await updateDoc(doc(db, "users", currentUser.uid), { photoURL });
+
+        const avatarEl = document.getElementById("profile-avatar");
+        if (avatarEl) {
+          if (avatarEl.tagName === "DIV") {
+            avatarEl.outerHTML = `<img id="profile-avatar" src="${photoURL}" class="profile-avatar" alt="Foto de perfil">`;
+          } else {
+            avatarEl.src = photoURL;
+          }
+        }
+
+        currentProfile.photoURL = photoURL;
+        setupNavbar(currentProfile);
+        showToast("Foto atualizada!", "success");
+      } catch (err) {
+        showToast("Erro ao atualizar foto: " + err.message, "error");
+      }
+    });
+
+    document.getElementById("btn-update").addEventListener("click", async () => {
+      const newPwd = document.getElementById("newPassword").value;
+      const confirmPwd = document.getElementById("confirmPassword").value;
+      const msg = document.getElementById("profile-message");
+
+      if (newPwd || confirmPwd) {
+        if (newPwd !== confirmPwd) {
+          msg.textContent = "As senhas não coincidem.";
+          msg.style.color = "var(--accent-red)";
+          return;
+        }
+        if (newPwd.length < 6) {
+          msg.textContent = "A senha deve ter pelo menos 6 caracteres.";
+          msg.style.color = "var(--accent-red)";
+          return;
+        }
+
+        try {
+          await updatePassword(currentUser, newPwd);
+          showToast("Senha atualizada!", "success");
+          document.getElementById("newPassword").value = "";
+          document.getElementById("confirmPassword").value = "";
+        } catch (err) {
+          msg.textContent = "Erro ao atualizar senha: " + err.message;
+          msg.style.color = "var(--accent-red)";
+        }
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

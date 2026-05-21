@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Primeiro Acesso - Bolão Quinta Categoria Show</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card animate-fade-in" style="max-width:480px;">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Quinta Categoria Show" class="logo">
+      <h1>PRIMEIRO ACESSO</h1>
+      <p>Complete seu cadastro para começar!</p>
+
+      <form id="first-access-form">
+        <div class="form-group">
+          <label for="nickname">Apelido (login)</label>
+          <input type="text" id="nickname" disabled>
+          <small style="color:var(--text-tertiary);font-size:12px;">Seu apelido já foi definido pelo admin.</small>
+        </div>
+        <div class="form-group">
+          <label for="firstName">Nome</label>
+          <input type="text" id="firstName" placeholder="Seu primeiro nome" required>
+        </div>
+        <div class="form-group">
+          <label for="lastName">Sobrenome</label>
+          <input type="text" id="lastName" placeholder="Seu sobrenome" required>
+        </div>
+        <div class="form-group">
+          <label for="newPassword">Nova Senha</label>
+          <input type="password" id="newPassword" placeholder="Crie uma nova senha (mín. 6 caracteres)" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirmar Senha</label>
+          <input type="password" id="confirmPassword" placeholder="Repita a nova senha" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label>Foto de Perfil</label>
+          <div style="text-align:center;margin:12px 0;">
+            <div id="photo-preview" class="profile-placeholder" style="margin:0 auto;">👤</div>
+          </div>
+          <input type="file" id="photoInput" accept="image/*" style="display:none;">
+          <button type="button" class="btn btn-secondary" style="width:100%;" id="btn-upload-photo">Escolher Foto</button>
+        </div>
+        <div id="form-error" class="error-message" style="display:block;"></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:16px;" id="btn-save">
+          Salvar Cadastro
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db, checkAuth, getUserProfile, fileToBase64, compressPhoto } from "./js/auth.js";
+    import { doc, setDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { updatePassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+
+    let selectedFile = null;
+    let currentUserProfile = null;
+
+    async function init() {
+      const { user, profile } = await checkAuth();
+      currentUserProfile = profile || {};
+
+      const nicknameMap = {
+        "paimei@bolao.com": "Pai Mei",
+        "falso9@bolao.com": "Falso 9",
+        "gildacio@bolao.com": "Gildácio",
+        "whiteglauber@bolao.com": "White Glauber",
+        "admin@bolao.com": "AdminSuper"
+      };
+
+      document.getElementById("nickname").value = nicknameMap[user.email] || user.email;
+
+      if (profile && profile.firstName) {
+        document.getElementById("firstName").value = profile.firstName || "";
+        document.getElementById("lastName").value = profile.lastName || "";
+        if (profile.photoURL) {
+          document.getElementById("photo-preview").outerHTML = `<img id="photo-preview" src="${profile.photoURL}" class="profile-avatar" style="width:120px;height:120px;border-radius:50%;border:3px solid var(--accent-orange);object-fit:cover;margin:12px auto;">`;
+        }
+      }
+    }
+
+    document.getElementById("btn-upload-photo").addEventListener("click", () => {
+      document.getElementById("photoInput").click();
+    });
+
+    document.getElementById("photoInput").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        selectedFile = file;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const preview = document.getElementById("photo-preview");
+          if (preview.tagName === "DIV") {
+            preview.outerHTML = `<img id="photo-preview" src="${ev.target.result}" style="width:120px;height:120px;border-radius:50%;border:3px solid var(--accent-orange);object-fit:cover;margin:12px auto;display:block;">`;
+          } else {
+            preview.src = ev.target.result;
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    document.getElementById("first-access-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorDiv = document.getElementById("form-error");
+      const btn = document.getElementById("btn-save");
+      errorDiv.style.display = "none";
+
+      const firstName = document.getElementById("firstName").value.trim();
+      const lastName = document.getElementById("lastName").value.trim();
+      const newPassword = document.getElementById("newPassword").value;
+      const confirmPassword = document.getElementById("confirmPassword").value;
+
+      if (!firstName || !lastName) {
+        errorDiv.textContent = "Preencha nome e sobrenome.";
+        errorDiv.style.display = "block";
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        errorDiv.textContent = "As senhas não coincidem.";
+        errorDiv.style.display = "block";
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        errorDiv.textContent = "A senha deve ter pelo menos 6 caracteres.";
+        errorDiv.style.display = "block";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+
+      try {
+        const user = auth.currentUser;
+        let photoURL = currentUserProfile?.photoURL || null;
+
+        if (selectedFile) {
+          const base64 = await fileToBase64(selectedFile);
+          photoURL = await compressPhoto(base64, 200);
+        }
+
+        await setDoc(doc(db, "users", user.uid), {
+          email: user.email,
+          nickname: document.getElementById("nickname").value,
+          firstName: firstName,
+          lastName: lastName,
+          displayName: `${document.getElementById("nickname").value} - vulgo ${firstName} ${lastName}`,
+          photoURL: photoURL,
+          firstAccess: false,
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+
+        await updatePassword(user, newPassword);
+
+        if (user.email === "admin@bolao.com") {
+          window.location.href = "admin.html";
+        } else {
+          window.location.href = "palpites.html";
+        }
+      } catch (error) {
+        errorDiv.textContent = "Erro ao salvar: " + error.message;
+        errorDiv.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Salvar Cadastro";
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

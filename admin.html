@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Admin - Bolão Quinta Categoria Show</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="palpites.html" class="navbar-logo">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Logo">
+      <span>QCS BOLÃO</span>
+    </a>
+    <button class="hamburger" id="hamburger">☰</button>
+    <div class="navbar-links" id="nav-links">
+      <a href="palpites.html">Palpites</a>
+      <a href="ranking.html">Ranking</a>
+      <a href="perfil.html">Perfil</a>
+      <a href="admin.html" class="active" id="nav-admin">Admin</a>
+      <a href="#" id="btn-logout">Sair</a>
+    </div>
+    <div class="navbar-user" id="navbar-user" onclick="window.location.href='perfil.html'"></div>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title">⚙️ PAINEL ADMIN</h1>
+
+    <!-- Sync Section -->
+    <div class="admin-section">
+      <h3>Sincronizar Resultados (SofaScore)</h3>
+      <div class="card">
+        <p style="color:var(--text-secondary);margin-bottom:16px;">
+          Clique no botão abaixo para baixar os resultados mais recentes da Copa do Mundo 2026 diretamente da API do SofaScore e atualizar o banco de dados.
+        </p>
+        <button class="btn btn-primary" id="btn-sync">Sincronizar Resultados</button>
+        <div id="sync-status" style="margin-top:12px;font-size:13px;color:var(--text-tertiary);"></div>
+      </div>
+    </div>
+
+    <!-- Manual Result Entry -->
+    <div class="admin-section">
+      <h3>Inserir Resultado Manual</h3>
+      <div class="card">
+        <div class="form-group">
+          <label for="manual-match">Jogo</label>
+          <select id="manual-match" style="width:100%;"></select>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <div class="form-group" style="flex:1;">
+            <label id="manual-home-label">Mandante</label>
+            <input type="number" id="manual-home-score" min="0" max="30" placeholder="0">
+          </div>
+          <span style="font-size:20px;padding-top:24px;">x</span>
+          <div class="form-group" style="flex:1;">
+            <label id="manual-away-label">Visitante</label>
+            <input type="number" id="manual-away-score" min="0" max="30" placeholder="0">
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="btn-manual-save" style="width:100%;margin-top:12px;">Salvar Resultado</button>
+      </div>
+    </div>
+
+    <!-- Users Section -->
+    <div class="admin-section">
+      <h3>Usuários Cadastrados</h3>
+      <div class="card" id="users-list">
+        <div class="spinner"></div>
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary" id="btn-add-user">+ Adicionar Usuário</button>
+      </div>
+    </div>
+
+    <!-- All Guesses -->
+    <div class="admin-section">
+      <h3>Todos os Palpites</h3>
+      <div class="card" id="all-guesses">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026
+  </div>
+
+  <!-- Add User Modal -->
+  <div class="modal-overlay" id="add-user-modal" style="display:none;">
+    <div class="modal-content">
+      <h3>Adicionar Novo Usuário</h3>
+      <div class="form-group">
+        <label for="new-user-email">E-mail</label>
+        <input type="email" id="new-user-email" placeholder="novo@bolao.com">
+      </div>
+      <div class="form-group">
+        <label for="new-user-nickname">Apelido</label>
+        <input type="text" id="new-user-nickname" placeholder="Apelido do participante">
+      </div>
+      <div class="form-group">
+        <label for="new-user-password">Senha Provisória</label>
+        <input type="password" id="new-user-password" value="copa2026" readonly>
+        <small style="color:var(--text-tertiary);">Senha padrão: copa2026 (o usuário trocará no primeiro acesso)</small>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-add-user">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirm-add-user">Criar Usuário</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db, checkAuth, setupNavbar, showToast, isAdmin } from "./js/auth.js";
+    import { getDocs, collection, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+
+    let allMatchesData = null;
+
+    async function init() {
+      const { user, profile } = await checkAuth("admin");
+      setupNavbar(profile);
+      await loadMatchesData();
+      loadUsers();
+      loadAllGuesses();
+      populateMatchSelect();
+    }
+
+    async function loadMatchesData() {
+      try {
+        const response = await fetch("data/matches.json");
+        allMatchesData = await response.json();
+      } catch (e) {
+        console.error("Erro ao carregar matches.json", e);
+      }
+    }
+
+    function populateMatchSelect() {
+      const select = document.getElementById("manual-match");
+      select.innerHTML = '<option value="">Selecione um jogo...</option>';
+
+      if (!allMatchesData) return;
+
+      allMatchesData.groupMatches.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        opt.textContent = `[Grupo ${m.group}] ${m.homeTeam} x ${m.awayTeam}`;
+        select.appendChild(opt);
+      });
+
+      allMatchesData.knockoutMatches.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        const stage = { "round-of-32": "Fase 32", "round-of-16": "Oitavas", "quarterfinals": "Quartas", "semifinals": "Semi", "third-place": "3º Lugar", "final": "Final" };
+        opt.textContent = `[${stage[m.stage] || m.stage}] ${m.homeTeam} x ${m.awayTeam}`;
+        select.appendChild(opt);
+      });
+    }
+
+    async function loadUsers() {
+      const container = document.getElementById("users-list");
+      try {
+        const snap = await getDocs(collection(db, "users"));
+        let html = "";
+        snap.forEach(d => {
+          const u = d.data();
+          html += `<div class="admin-user-row">
+            <div>
+              <strong>${u.nickname || u.email}</strong>
+              ${u.firstName ? `<span style="color:var(--text-tertiary);"> - ${u.firstName} ${u.lastName || ""}</span>` : ""}
+              ${u.email === "admin@bolao.com" ? '<span style="color:var(--accent-orange);font-size:12px;margin-left:8px;">[ADMIN]</span>' : ""}
+            </div>
+            <div style="color:var(--text-tertiary);font-size:13px;">${u.email}</div>
+          </div>`;
+        });
+        container.innerHTML = html || '<p style="color:var(--text-tertiary);">Nenhum usuário encontrado.</p>';
+      } catch (e) {
+        container.innerHTML = '<p style="color:var(--accent-red);">Erro ao carregar usuários.</p>';
+      }
+    }
+
+    async function loadAllGuesses() {
+      const container = document.getElementById("all-guesses");
+      try {
+        const snap = await getDocs(collection(db, "guesses"));
+        let html = "";
+        const guesses = [];
+        snap.forEach(d => guesses.push(d.data()));
+
+        if (guesses.length === 0) {
+          container.innerHTML = '<p style="color:var(--text-tertiary);">Nenhum palpite registrado ainda.</p>';
+          return;
+        }
+
+        html += '<table class="ranking-table"><thead><tr><th>Usuário</th><th>Jogo</th><th>Palpite</th></tr></thead><tbody>';
+        guesses.forEach(g => {
+          html += `<tr>
+            <td>${g.userId.substring(0, 8)}...</td>
+            <td>${g.homeTeam} x ${g.awayTeam}</td>
+            <td class="score-font">${g.homeScore} x ${g.awayScore}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      } catch (e) {
+        container.innerHTML = '<p style="color:var(--accent-red);">Erro ao carregar palpites.</p>';
+      }
+    }
+
+    // Sync SofaScore
+    document.getElementById("btn-sync").addEventListener("click", async () => {
+      const statusEl = document.getElementById("sync-status");
+      const btn = document.getElementById("btn-sync");
+      btn.disabled = true;
+      statusEl.textContent = "Sincronizando...";
+      statusEl.style.color = "var(--accent-orange)";
+
+      try {
+        const SEASON_ID = 58210;
+        const BASE_URL = "https://api.sofascore.com/api/v1/unique-tournament/16/season";
+        const rounds = [1, 2, 3, 6, 5, 27, 28, 50, 29];
+        let updated = 0;
+
+        for (const round of rounds) {
+          try {
+            const resp = await fetch(`${BASE_URL}/${SEASON_ID}/events/round/${round}`);
+            const data = await resp.json();
+
+            for (const event of (data.events || [])) {
+              if (event.status && event.status.code >= 100) {
+                const homeScore = event.homeScore?.current;
+                const awayScore = event.awayScore?.current;
+
+                if (homeScore !== null && homeScore !== undefined && awayScore !== null && awayScore !== undefined) {
+                  await setDoc(doc(db, "matches", `sofa_${event.id}`), {
+                    sofaScoreId: event.id,
+                    homeTeam: event.homeTeam.name,
+                    awayTeam: event.awayTeam.name,
+                    homeScore: homeScore,
+                    awayScore: awayScore,
+                    status: "finished",
+                    round: round,
+                    updatedAt: new Date().toISOString()
+                  });
+                  updated++;
+                }
+              }
+            }
+          } catch (roundErr) {
+            console.warn(`Erro na rodada ${round}:`, roundErr);
+          }
+        }
+
+        statusEl.textContent = `Sincronização concluída! ${updated} resultado(s) atualizado(s).`;
+        statusEl.style.color = "var(--success)";
+        showToast(`${updated} resultado(s) atualizado(s)!`, "success");
+      } catch (e) {
+        statusEl.textContent = "Erro na sincronização: " + e.message;
+        statusEl.style.color = "var(--accent-red)";
+        showToast("Erro na sincronização", "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Manual result
+    document.getElementById("manual-match").addEventListener("change", (e) => {
+      const matchId = parseInt(e.target.value);
+      if (!matchId || !allMatchesData) return;
+
+      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
+      const match = allMatches.find(m => m.id === matchId);
+      if (match) {
+        document.getElementById("manual-home-label").textContent = match.homeTeam;
+        document.getElementById("manual-away-label").textContent = match.awayTeam;
+      }
+    });
+
+    document.getElementById("btn-manual-save").addEventListener("click", async () => {
+      const matchId = document.getElementById("manual-match").value;
+      const homeScore = document.getElementById("manual-home-score").value;
+      const awayScore = document.getElementById("manual-away-score").value;
+
+      if (!matchId || homeScore === "" || awayScore === "") {
+        showToast("Preencha todos os campos.", "warning");
+        return;
+      }
+
+      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
+      const match = allMatches.find(m => m.id === parseInt(matchId));
+      if (!match) return;
+
+      try {
+        await setDoc(doc(db, "matches", `match_${matchId}`), {
+          matchId: matchId,
+          homeTeam: match.homeTeam,
+          awayTeam: match.awayTeam,
+          homeScore: parseInt(homeScore),
+          awayScore: parseInt(awayScore),
+          status: "finished",
+          updatedAt: new Date().toISOString()
+        });
+        showToast("Resultado salvo!", "success");
+        document.getElementById("manual-home-score").value = "";
+        document.getElementById("manual-away-score").value = "";
+      } catch (e) {
+        showToast("Erro ao salvar: " + e.message, "error");
+      }
+    });
+
+    // Add User
+    document.getElementById("btn-add-user").addEventListener("click", () => {
+      document.getElementById("add-user-modal").style.display = "flex";
+    });
+
+    document.getElementById("btn-cancel-add-user").addEventListener("click", () => {
+      document.getElementById("add-user-modal").style.display = "none";
+    });
+
+    document.getElementById("btn-confirm-add-user").addEventListener("click", async () => {
+      const email = document.getElementById("new-user-email").value.trim();
+      const nickname = document.getElementById("new-user-nickname").value.trim();
+      const password = "copa2026";
+
+      if (!email || !nickname) {
+        showToast("Preencha e-mail e apelido.", "warning");
+        return;
+      }
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, "users", userCredential.user.uid), {
+          email: email,
+          nickname: nickname,
+          firstName: "",
+          lastName: "",
+          photoURL: null,
+          firstAccess: true,
+          createdAt: new Date().toISOString()
+        });
+        showToast(`Usuário ${nickname} criado!`, "success");
+        document.getElementById("add-user-modal").style.display = "none";
+        document.getElementById("new-user-email").value = "";
+        document.getElementById("new-user-nickname").value = "";
+        loadUsers();
+      } catch (e) {
+        showToast("Erro ao criar usuário: " + e.message, "error");
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

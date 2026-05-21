@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Palpites - Bolão Quinta Categoria Show</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="palpites.html" class="navbar-logo">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Logo">
+      <span>QCS BOLÃO</span>
+    </a>
+    <button class="hamburger" id="hamburger">☰</button>
+    <div class="navbar-links" id="nav-links">
+      <a href="palpites.html" class="active">Palpites</a>
+      <a href="ranking.html">Ranking</a>
+      <a href="perfil.html">Perfil</a>
+      <a href="admin.html" id="nav-admin" style="display:none;">Admin</a>
+      <a href="#" id="btn-logout">Sair</a>
+    </div>
+    <div class="navbar-user" id="navbar-user" onclick="window.location.href='perfil.html'"></div>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title">PALPITES</h1>
+
+    <div class="round-tabs" id="round-tabs"></div>
+
+    <div id="matches-container">
+      <div class="spinner"></div>
+      <p class="loading-text">Carregando jogos...</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal-overlay" id="confirm-modal" style="display:none;">
+    <div class="modal-content">
+      <h3>Confirmar Palpite</h3>
+      <p id="confirm-modal-text"></p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-guess">Cancelar</button>
+        <button class="btn btn-primary" id="btn-confirm-guess">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, db, checkAuth, setupNavbar, showToast, formatDate } from "./js/auth.js";
+    import { getDoc, doc, setDoc, onSnapshot, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+    let currentUser = null;
+    let currentProfile = null;
+    let matchesData = [];
+    let currentRound = 1;
+    let matchLockStatus = {};
+
+    async function init() {
+      const { user, profile } = await checkAuth();
+      currentUser = user;
+      currentProfile = profile;
+      setupNavbar(profile);
+      await loadMatches();
+      await setupRoundTabs();
+      renderMatches();
+    }
+
+    async function loadMatches() {
+      try {
+        const response = await fetch("data/matches.json");
+        const data = await response.json();
+        matchesData = data;
+
+        const guessSnap = await getDocs(collection(db, "guesses"));
+        const guesses = {};
+        guessSnap.forEach(d => { guesses[d.id] = d.data(); });
+
+        const matchSnap = await getDocs(collection(db, "matches"));
+        matchSnap.forEach(d => {
+          const md = d.data();
+          matchLockStatus[d.id] = md;
+        });
+
+      } catch (e) {
+        showToast("Erro ao carregar jogos", "error");
+      }
+    }
+
+    function getAllRounds() {
+      const rounds = new Set();
+      matchesData.groupMatches.forEach(m => rounds.add(m.round));
+      return [
+        ...Array.from(rounds).sort().map(r => ({ value: r, label: `Rodada ${r}` })),
+        { value: "round-of-32", label: "Fase de 32" },
+        { value: "round-of-16", label: "Oitavas" },
+        { value: "quarterfinals", label: "Quartas" },
+        { value: "semifinals", label: "Semis" },
+        { value: "third-place", label: "3º Lugar" },
+        { value: "final", label: "Final" }
+      ];
+    }
+
+    async function setupRoundTabs() {
+      const tabs = document.getElementById("round-tabs");
+      const rounds = getAllRounds();
+      rounds.forEach((r, i) => {
+        const btn = document.createElement("button");
+        btn.textContent = r.label;
+        btn.dataset.round = r.value;
+        if (i === 0) btn.classList.add("active");
+        btn.addEventListener("click", () => {
+          tabs.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          currentRound = r.value;
+          renderMatches();
+        });
+        tabs.appendChild(btn);
+      });
+    }
+
+    function isLocked(round) {
+      const now = new Date();
+      const matches = getMatchesForRound(round);
+      if (matches.length === 0) return false;
+      const firstMatch = matches.reduce((earliest, m) => {
+        const d = new Date(m.date);
+        return d < earliest ? d : earliest;
+      }, new Date(matches[0].date));
+      const lockTime = new Date(firstMatch.getTime() - 30 * 60 * 1000);
+      return now >= lockTime;
+    }
+
+    function getCountdown(round) {
+      const now = new Date();
+      const matches = getMatchesForRound(round);
+      if (matches.length === 0) return null;
+      const firstMatch = matches.reduce((earliest, m) => {
+        const d = new Date(m.date);
+        return d < earliest ? d : earliest;
+      }, new Date(matches[0].date));
+      const lockTime = new Date(firstMatch.getTime() - 30 * 60 * 1000);
+      const diff = lockTime - now;
+      if (diff <= 0) return null;
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+      return `${hours}h ${mins}m ${secs}s`;
+    }
+
+    function getMatchesForRound(round) {
+      if (typeof round === "number") {
+        return matchesData.groupMatches.filter(m => m.round === round);
+      }
+      return matchesData.knockoutMatches.filter(m => m.stage === round);
+    }
+
+    function renderMatches() {
+      const container = document.getElementById("matches-container");
+      const matches = getMatchesForRound(currentRound);
+      const locked = isLocked(currentRound);
+      const countdown = getCountdown(currentRound);
+
+      let html = "";
+
+      if (countdown) {
+        html += `<div style="text-align:center;margin-bottom:16px;">
+          <span style="color:var(--text-tertiary);font-size:13px;">Trava em:</span>
+          <span class="countdown" id="countdown-timer">${countdown}</span>
+        </div>`;
+      }
+
+      if (locked) {
+        html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(212,57,28,0.15);border-radius:8px;color:var(--accent-red);font-weight:600;">🔒 Palpites travados para esta rodada</div>`;
+      }
+
+      if (matches.length === 0) {
+        html += `<p style="text-align:center;color:var(--text-tertiary);">Nenhum jogo disponível para esta rodada.</p>`;
+      }
+
+      matches.forEach(m => {
+        const matchLocked = locked;
+        const matchDate = formatDate(m.date);
+        const isGroup = typeof currentRound === "number";
+        const groupLabel = isGroup ? `Grupo ${m.group}` : stageLabel(m.stage);
+
+        html += `<div class="card match-card ${matchLocked ? 'match-locked' : ''} animate-fade-in">
+          <div class="match-header">
+            <span class="match-group-badge">${groupLabel}</span>
+            <span style="color:var(--text-tertiary);font-size:12px;">${matchDate}</span>
+          </div>
+          <div class="match-teams">
+            <div style="flex:1;text-align:center;">
+              <div class="team-name">${m.homeTeam}</div>
+            </div>
+            <div class="score-input" data-match-id="${m.id}">
+              <input type="number" min="0" max="30" value="" placeholder="-" ${matchLocked ? 'disabled' : ''} class="home-score" data-match="${m.id}">
+              <span class="vs">x</span>
+              <input type="number" min="0" max="30" value="" placeholder="-" ${matchLocked ? 'disabled' : ''} class="away-score" data-match="${m.id}">
+            </div>
+            <div style="flex:1;text-align:center;">
+              <div class="team-name">${m.awayTeam}</div>
+            </div>
+          </div>
+        </div>`;
+      });
+
+      if (!locked && matches.length > 0) {
+        html += `<div style="text-align:center;margin-top:24px;">
+          <button class="btn btn-primary" id="btn-save-all">Salvar Palpites</button>
+        </div>`;
+      }
+
+      container.innerHTML = html;
+
+      if (!locked && matches.length > 0) {
+        const saveBtn = document.getElementById("btn-save-all");
+        if (saveBtn) {
+          saveBtn.addEventListener("click", handleSaveAll);
+        }
+      }
+    }
+
+    function stageLabel(stage) {
+      const labels = {
+        "round-of-32": "Fase de 32",
+        "round-of-16": "Oitavas de Final",
+        "quarterfinals": "Quartas de Final",
+        "semifinals": "Semifinais",
+        "third-place": "3º Lugar",
+        "final": "Final"
+      };
+      return labels[stage] || stage;
+    }
+
+    async function handleSaveAll() {
+      const matches = getMatchesForRound(currentRound);
+      const guesses = [];
+      let hasEmpty = false;
+
+      matches.forEach(m => {
+        const homeInput = document.querySelector(`.home-score[data-match="${m.id}"]`);
+        const awayInput = document.querySelector(`.away-score[data-match="${m.id}"]`);
+
+        if (homeInput && awayInput) {
+          const homeScore = homeInput.value.trim();
+          const awayScore = awayInput.value.trim();
+
+          if (homeScore === "" || awayScore === "") {
+            hasEmpty = true;
+          } else {
+            guesses.push({
+              matchId: m.id,
+              homeScore: parseInt(homeScore),
+              awayScore: parseInt(awayScore),
+              homeTeam: m.homeTeam,
+              awayTeam: m.awayTeam,
+              locked: true
+            });
+          }
+        }
+      });
+
+      if (hasEmpty) {
+        showToast("Preencha todos os placares antes de salvar.", "warning");
+        return;
+      }
+
+      if (guesses.length === 0) {
+        showToast("Nenhum palpite para salvar.", "warning");
+        return;
+      }
+
+      const modal = document.getElementById("confirm-modal");
+      const textEl = document.getElementById("confirm-modal-text");
+      textEl.innerHTML = `Você está prestes a confirmar <strong>${guesses.length}</strong> palpite(s).<br>Palpites confirmados <strong>não podem ser alterados</strong>.<br><br>Confirma?`;
+      modal.style.display = "flex";
+
+      document.getElementById("btn-confirm-guess").onclick = async () => {
+        modal.style.display = "none";
+        try {
+          for (const g of guesses) {
+            await setDoc(doc(db, "guesses", `${currentUser.uid}_match_${g.matchId}`), {
+              userId: currentUser.uid,
+              matchId: g.matchId,
+              homeTeam: g.homeTeam,
+              awayTeam: g.awayTeam,
+              homeScore: g.homeScore,
+              awayScore: g.awayScore,
+              locked: true,
+              createdAt: new Date().toISOString()
+            });
+          }
+          showToast("Palpites salvos com sucesso!", "success");
+          renderMatches();
+        } catch (e) {
+          showToast("Erro ao salvar palpites: " + e.message, "error");
+        }
+      };
+
+      document.getElementById("btn-cancel-guess").onclick = () => {
+        modal.style.display = "none";
+      };
+    }
+
+    init();
+  </script>
+</body>
+</html>
