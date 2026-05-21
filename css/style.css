@@ -694,6 +694,21 @@ a:hover {
   margin-top: 2px;
 }
 
+.participant-guest {
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 12px rgba(244, 124, 32, 0.2);
+}
+
+.participant-badge {
+  font-size: 11px;
+  color: var(--accent-orange);
+  margin-top: 8px;
+  font-style: italic;
+  line-height: 1.3;
+  padding-top: 8px;
+  border-top: 1px solid var(--bg-tertiary);
+}
+
 .home-info {
   text-align: center;
   padding: 20px;

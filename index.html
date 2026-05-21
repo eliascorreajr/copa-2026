@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quinta Categoria Show - Bolão Copa 2026</title>
-  <link rel="stylesheet" href="css/style.css?v=2">
+  <link rel="stylesheet" href="css/style.css?v=3">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -75,7 +75,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, isAdmin } from "./js/auth.js?v=2";
+    import { auth, db, checkAuth, setupNavbar, isAdmin } from "./js/auth.js?v=3";
     import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
     async function init() {
@@ -110,10 +110,11 @@
             ? `${u.firstName} ${u.lastName || ""}`
             : "";
 
-          html += `<div class="participant-card">
+          html += `<div class="participant-card${u.email === "whiteglauber@bolao.com" ? " participant-guest" : ""}">
             ${avatar}
             <div class="participant-nickname">${u.nickname || u.email}</div>
             ${name ? `<div class="participant-name">${name}</div>` : ""}
+            ${u.email === "whiteglauber@bolao.com" ? `<div class="participant-badge">* Participante convidado. Pode ser removido a qualquer momento.</div>` : ""}
           </div>`;
         });
 
