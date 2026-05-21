@@ -131,8 +131,8 @@
       </div>
       <div class="form-group">
         <label for="new-user-password">Senha Provisória</label>
-        <input type="password" id="new-user-password" value="copa2026" readonly>
-        <small style="color:var(--text-tertiary);">Senha padrão: copa2026 (o usuário trocará no primeiro acesso)</small>
+        <input type="password" id="new-user-password" value="" placeholder="Mínimo 6 caracteres" readonly>
+        <small style="color:var(--text-tertiary);">A senha padrão será definida automaticamente.</small>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" id="btn-cancel-add-user">Cancelar</button>
@@ -478,7 +478,7 @@
     document.getElementById("btn-confirm-add-user").addEventListener("click", async () => {
       const email = document.getElementById("new-user-email").value.trim();
       const nickname = document.getElementById("new-user-nickname").value.trim();
-      const password = "copa2026";
+      const password = Math.random().toString(36).slice(2, 10);
       if (!email || !nickname) {
         showToast("Preencha e-mail e apelido.", "warning");
         return;

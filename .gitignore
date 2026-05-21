@@ -12,3 +12,6 @@ firestore-rules.txt
 *.xlsx
 extract_matches.py
 Analise_Scraper_SofaScore.md
+js/firebase-config.js
+Guia_Configuracao_GitHub_Firebase.md
+quinta-categoria-show-logo.jpg
