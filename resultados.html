@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resultados - Bolão Quinta Categoria Show</title>
+  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="navbar-logo">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Logo">
+      <span>QCS BOLÃO</span>
+    </a>
+    <button class="hamburger" id="hamburger">☰</button>
+    <div class="navbar-links" id="nav-links">
+      <a href="index.html">Início</a>
+      <a href="palpites.html">Palpites</a>
+      <a href="resultados.html" class="active">Resultados</a>
+      <a href="ranking.html">Ranking</a>
+      <a href="historico.html">Histórico</a>
+      <a href="perfil.html">Perfil</a>
+      <a href="admin.html" id="nav-admin" style="display:none;">Admin</a>
+      <a href="#" id="btn-logout">Sair</a>
+    </div>
+    <div class="navbar-user" id="navbar-user" onclick="window.location.href='perfil.html'"></div>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title">RESULTADOS</h1>
+
+    <div class="round-tabs" id="round-tabs"></div>
+
+    <div id="results-container">
+      <div class="spinner"></div>
+      <p class="loading-text">Carregando resultados...</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026 &mdash; Grupo Discípulos de Pai Mei
+  </div>
+
+  <script type="module">
+    import { auth, db, checkAuth, setupNavbar } from "./js/auth.js?v=3";
+    import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+    let matchesData = null;
+    let currentRound = 1;
+
+    async function init() {
+      const { user, profile } = await checkAuth();
+      setupNavbar(profile);
+      await loadMatches();
+      setupRoundTabs();
+      renderResults();
+    }
+
+    async function loadMatches() {
+      try {
+        const response = await fetch("data/matches.json");
+        matchesData = await response.json();
+      } catch (e) {
+        console.error("Erro ao carregar matches.json", e);
+      }
+    }
+
+    function getAllRounds() {
+      if (!matchesData) return [];
+      const rounds = new Set();
+      matchesData.groupMatches.forEach(m => rounds.add(m.round));
+      return [
+        ...Array.from(rounds).sort().map(r => ({ value: r, label: `Rodada ${r}` })),
+        { value: "round-of-32", label: "Fase de 32" },
+        { value: "round-of-16", label: "Oitavas" },
+        { value: "quarterfinals", label: "Quartas" },
+        { value: "semifinals", label: "Semis" },
+        { value: "third-place", label: "3º Lugar" },
+        { value: "final", label: "Final" }
+      ];
+    }
+
+    function getMatchesForRound(round) {
+      if (!matchesData) return [];
+      if (typeof round === "number") {
+        return matchesData.groupMatches.filter(m => m.round === round);
+      }
+      return matchesData.knockoutMatches.filter(m => m.stage === round);
+    }
+
+    function setupRoundTabs() {
+      const tabs = document.getElementById("round-tabs");
+      const rounds = getAllRounds();
+      rounds.forEach((r, i) => {
+        const btn = document.createElement("button");
+        btn.textContent = r.label;
+        btn.dataset.round = r.value;
+        if (i === 0) btn.classList.add("active");
+        btn.addEventListener("click", () => {
+          tabs.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          currentRound = r.value;
+          renderResults();
+        });
+        tabs.appendChild(btn);
+      });
+    }
+
+    function stageLabel(stage) {
+      const labels = {
+        "round-of-32": "Fase de 32",
+        "round-of-16": "Oitavas de Final",
+        "quarterfinals": "Quartas de Final",
+        "semifinals": "Semifinais",
+        "third-place": "3º Lugar",
+        "final": "Final"
+      };
+      return labels[stage] || stage;
+    }
+
+    async function renderResults() {
+      const container = document.getElementById("results-container");
+      const matches = getMatchesForRound(currentRound);
+      if (!matches || matches.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);">Nenhum jogo disponível para esta rodada.</p>';
+        return;
+      }
+
+      const resultsSnap = await getDocs(collection(db, "matches"));
+      const results = {};
+      resultsSnap.forEach(d => {
+        const data = d.data();
+        results[data.matchId || data.sofaScoreId || d.id.replace("match_", "").replace("sofa_", "")] = data;
+      });
+
+      let html = "";
+      matches.forEach(m => {
+        const result = results[m.id] || results[String(m.id)];
+        const hasResult = result && result.homeScore !== null && result.homeScore !== undefined && result.status === "finished";
+        const isGroup = typeof currentRound === "number";
+
+        html += `<div class="card match-card animate-fade-in${hasResult ? ' match-finished' : ''}">
+          <div class="match-header">
+            <span class="match-group-badge">${isGroup ? `Grupo ${m.group}` : stageLabel(m.stage)}</span>
+            <span style="color:var(--text-tertiary);font-size:12px;">${formatDate(m.date)}</span>
+          </div>
+          <div class="match-teams">
+            <div style="flex:1;text-align:center;">
+              <div class="team-name">${m.homeTeam}</div>
+            </div>
+            ${hasResult ? `
+              <div class="score-official">
+                <span>${result.homeScore}</span>
+                <span class="dash">x</span>
+                <span>${result.awayScore}</span>
+              </div>
+            ` : `
+              <div class="score-official" style="color:var(--text-tertiary);">
+                <span>-</span>
+                <span class="dash">x</span>
+                <span>-</span>
+              </div>
+            `}
+            <div style="flex:1;text-align:center;">
+              <div class="team-name">${m.awayTeam}</div>
+            </div>
+          </div>
+          ${hasResult ? '' : '<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-tertiary);">Aguardando resultado</div>'}
+        </div>`;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      const options = { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" };
+      return date.toLocaleString("pt-BR", options);
+    }
+
+    init();
+  </script>
+</body>
+</html>

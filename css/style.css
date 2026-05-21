@@ -1015,6 +1015,44 @@ a:hover {
   margin-bottom: 8px;
 }
 
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) var(--bg-primary);
+}
+
+.admin-tab {
+  padding: 10px 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: 24px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition-fast);
+}
+
+.admin-tab:hover {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+}
+
+.admin-tab.active {
+  background: var(--gradient-btn);
+  border-color: var(--accent-orange);
+  color: var(--text-primary);
+}
+
+.btn-sm {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;

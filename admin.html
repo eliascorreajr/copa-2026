@@ -17,7 +17,9 @@
     <div class="navbar-links" id="nav-links">
       <a href="index.html">Início</a>
       <a href="palpites.html">Palpites</a>
+      <a href="resultados.html">Resultados</a>
       <a href="ranking.html">Ranking</a>
+      <a href="historico.html">Histórico</a>
       <a href="perfil.html">Perfil</a>
       <a href="admin.html" class="active" id="nav-admin">Admin</a>
       <a href="#" id="btn-logout">Sair</a>
@@ -26,65 +28,93 @@
   </nav>
 
   <div class="container">
-    <h1 class="page-title">⚙️ PAINEL ADMIN</h1>
+    <h1 class="page-title">PAINEL ADMIN</h1>
 
-    <!-- Sync Section -->
-    <div class="admin-section">
-      <h3>Sincronizar Resultados (SofaScore)</h3>
-      <div class="card">
-        <p style="color:var(--text-secondary);margin-bottom:16px;">
-          Clique no botão abaixo para baixar os resultados mais recentes da Copa do Mundo 2026 diretamente da API do SofaScore e atualizar o banco de dados.
-        </p>
-        <button class="btn btn-primary" id="btn-sync">Sincronizar Resultados</button>
-        <div id="sync-status" style="margin-top:12px;font-size:13px;color:var(--text-tertiary);"></div>
-      </div>
+    <div class="admin-tabs" id="admin-tabs">
+      <button class="admin-tab active" data-tab="results">Resultados</button>
+      <button class="admin-tab" data-tab="users">Usuários</button>
+      <button class="admin-tab" data-tab="guesses">Palpites</button>
+      <button class="admin-tab" data-tab="logs">Logs</button>
     </div>
 
-    <!-- Manual Result Entry -->
-    <div class="admin-section">
-      <h3>Inserir Resultado Manual</h3>
-      <div class="card">
-        <div class="form-group">
-          <label for="manual-match">Jogo</label>
-          <select id="manual-match" style="width:100%;"></select>
+    <div id="tab-results" class="admin-panel">
+      <div class="admin-section">
+        <h3>Sincronizar Resultados (SofaScore)</h3>
+        <div class="card">
+          <p style="color:var(--text-secondary);margin-bottom:16px;">
+            Baixa os resultados mais recentes da Copa do Mundo 2026 diretamente da API do SofaScore.
+          </p>
+          <button class="btn btn-primary" id="btn-sync">Sincronizar Resultados</button>
+          <div id="sync-status" style="margin-top:12px;font-size:13px;color:var(--text-tertiary);"></div>
         </div>
-        <div style="display:flex;gap:12px;align-items:center;">
-          <div class="form-group" style="flex:1;">
-            <label id="manual-home-label">Mandante</label>
-            <input type="number" id="manual-home-score" min="0" max="30" placeholder="0">
+      </div>
+
+      <div class="admin-section">
+        <h3>Inserir / Corrigir Resultado Manualmente</h3>
+        <div class="card">
+          <div class="form-group">
+            <label for="manual-match">Jogo</label>
+            <select id="manual-match" style="width:100%;"></select>
           </div>
-          <span style="font-size:20px;padding-top:24px;">x</span>
-          <div class="form-group" style="flex:1;">
-            <label id="manual-away-label">Visitante</label>
-            <input type="number" id="manual-away-score" min="0" max="30" placeholder="0">
+          <div style="display:flex;gap:12px;align-items:center;">
+            <div class="form-group" style="flex:1;">
+              <label id="manual-home-label">Mandante</label>
+              <input type="number" id="manual-home-score" min="0" max="30" placeholder="0">
+            </div>
+            <span style="font-size:20px;padding-top:24px;">x</span>
+            <div class="form-group" style="flex:1;">
+              <label id="manual-away-label">Visitante</label>
+              <input type="number" id="manual-away-score" min="0" max="30" placeholder="0">
+            </div>
           </div>
+          <button class="btn btn-secondary" id="btn-manual-save" style="width:100%;margin-top:12px;">Salvar Resultado</button>
         </div>
-        <button class="btn btn-secondary" id="btn-manual-save" style="width:100%;margin-top:12px;">Salvar Resultado</button>
+      </div>
+
+      <div class="admin-section">
+        <h3>Resultados Cadastrados</h3>
+        <div class="card" id="results-list">
+          <div class="spinner"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Users Section -->
-    <div class="admin-section">
-      <h3>Usuários Cadastrados</h3>
-      <div class="card" id="users-list">
-        <div class="spinner"></div>
-      </div>
-      <div style="margin-top:16px;">
-        <button class="btn btn-primary" id="btn-add-user">+ Adicionar Usuário</button>
+    <div id="tab-users" class="admin-panel" style="display:none;">
+      <div class="admin-section">
+        <h3>Usuários Cadastrados</h3>
+        <div class="card" id="users-list">
+          <div class="spinner"></div>
+        </div>
+        <div style="margin-top:16px;">
+          <button class="btn btn-primary" id="btn-add-user">+ Adicionar Usuário</button>
+        </div>
       </div>
     </div>
 
-    <!-- All Guesses -->
-    <div class="admin-section">
-      <h3>Todos os Palpites</h3>
-      <div class="card" id="all-guesses">
-        <div class="spinner"></div>
+    <div id="tab-guesses" class="admin-panel" style="display:none;">
+      <div class="admin-section">
+        <h3>Todos os Palpites</h3>
+        <div style="margin-bottom:16px;">
+          <button class="btn btn-primary" id="btn-export-excel">Exportar para Excel</button>
+        </div>
+        <div class="card" id="all-guesses">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-logs" class="admin-panel" style="display:none;">
+      <div class="admin-section">
+        <h3>Logs de Atividade</h3>
+        <div class="card" id="logs-list">
+          <div class="spinner"></div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="footer">
-    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026 &mdash; Grupo Discípulos de Pai Mei
   </div>
 
   <!-- Add User Modal -->
@@ -113,7 +143,7 @@
 
   <script type="module">
     import { auth, db, checkAuth, setupNavbar, showToast, isAdmin } from "./js/auth.js?v=3";
-    import { getDocs, collection, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { getDocs, collection, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
     let allMatchesData = null;
@@ -122,9 +152,23 @@
       const { user, profile } = await checkAuth("admin");
       setupNavbar(profile);
       await loadMatchesData();
+      setupTabs();
+      loadResults();
       loadUsers();
       loadAllGuesses();
+      loadLogs();
       populateMatchSelect();
+    }
+
+    function setupTabs() {
+      document.querySelectorAll(".admin-tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".admin-tab").forEach(t => t.classList.remove("active"));
+          tab.classList.add("active");
+          document.querySelectorAll(".admin-panel").forEach(p => p.style.display = "none");
+          document.getElementById(`tab-${tab.dataset.tab}`).style.display = "block";
+        });
+      });
     }
 
     async function loadMatchesData() {
@@ -139,16 +183,13 @@
     function populateMatchSelect() {
       const select = document.getElementById("manual-match");
       select.innerHTML = '<option value="">Selecione um jogo...</option>';
-
       if (!allMatchesData) return;
-
       allMatchesData.groupMatches.forEach(m => {
         const opt = document.createElement("option");
         opt.value = m.id;
         opt.textContent = `[Grupo ${m.group}] ${m.homeTeam} x ${m.awayTeam}`;
         select.appendChild(opt);
       });
-
       allMatchesData.knockoutMatches.forEach(m => {
         const opt = document.createElement("option");
         opt.value = m.id;
@@ -156,6 +197,46 @@
         opt.textContent = `[${stage[m.stage] || m.stage}] ${m.homeTeam} x ${m.awayTeam}`;
         select.appendChild(opt);
       });
+    }
+
+    async function loadResults() {
+      const container = document.getElementById("results-list");
+      try {
+        const snap = await getDocs(collection(db, "matches"));
+        if (snap.empty) {
+          container.innerHTML = '<p style="color:var(--text-tertiary);">Nenhum resultado cadastrado ainda.</p>';
+          return;
+        }
+        const results = [];
+        snap.forEach(d => results.push({ id: d.id, ...d.data() }));
+        results.sort((a, b) => (a.updatedAt || "").localeCompare(b.updatedAt || "")).reverse();
+
+        let html = '<table class="ranking-table"><thead><tr><th>Jogo</th><th>Placar</th><th>Fonte</th><th>Ações</th></tr></thead><tbody>';
+        results.forEach(r => {
+          const source = r.manualEntry ? "Manual" : (r.sofaScoreId ? "SofaScore" : "Manual");
+          html += `<tr>
+            <td>${r.homeTeam} x ${r.awayTeam}</td>
+            <td class="score-font">${r.homeScore} x ${r.awayScore}</td>
+            <td style="font-size:12px;color:var(--text-tertiary);">${source}</td>
+            <td><button class="btn btn-danger btn-sm" data-delete-match="${r.id}" style="padding:4px 10px;font-size:12px;">Excluir</button></td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        container.querySelectorAll("[data-delete-match]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            if (confirm("Excluir este resultado?")) {
+              await deleteDoc(doc(db, "matches", btn.dataset.deleteMatch));
+              await addLog("RESULTADO EXCLUÍDO", `ID: ${btn.dataset.deleteMatch}`);
+              showToast("Resultado excluído!", "success");
+              loadResults();
+            }
+          });
+        });
+      } catch (e) {
+        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar resultados: ${e.message}</p>`;
+      }
     }
 
     async function loadUsers() {
@@ -170,6 +251,7 @@
               <strong>${u.nickname || u.email}</strong>
               ${u.firstName ? `<span style="color:var(--text-tertiary);"> - ${u.firstName} ${u.lastName || ""}</span>` : ""}
               ${u.email === "admin@bolao.com" ? '<span style="color:var(--accent-orange);font-size:12px;margin-left:8px;">[ADMIN]</span>' : ""}
+              ${u.email === "whiteglauber@bolao.com" ? '<span style="color:var(--accent-orange);font-size:12px;margin-left:8px;">[CONVIDADO]</span>' : ""}
             </div>
             <div style="color:var(--text-tertiary);font-size:13px;">${u.email}</div>
           </div>`;
@@ -183,28 +265,78 @@
     async function loadAllGuesses() {
       const container = document.getElementById("all-guesses");
       try {
-        const snap = await getDocs(collection(db, "guesses"));
-        let html = "";
+        const [guessSnap, userSnap] = await Promise.all([
+          getDocs(collection(db, "guesses")),
+          getDocs(collection(db, "users"))
+        ]);
+        const userMap = {};
+        userSnap.forEach(d => { userMap[d.id] = d.data(); });
+
         const guesses = [];
-        snap.forEach(d => guesses.push(d.data()));
+        guessSnap.forEach(d => guesses.push(d.data()));
 
         if (guesses.length === 0) {
           container.innerHTML = '<p style="color:var(--text-tertiary);">Nenhum palpite registrado ainda.</p>';
           return;
         }
 
-        html += '<table class="ranking-table"><thead><tr><th>Usuário</th><th>Jogo</th><th>Palpite</th></tr></thead><tbody>';
+        let html = '<table class="ranking-table"><thead><tr><th>Usuário</th><th>Jogo</th><th>Palpite</th><th>Data</th></tr></thead><tbody>';
         guesses.forEach(g => {
+          const user = userMap[g.userId];
+          const nickname = user ? (user.nickname || user.email) : g.userId.substring(0, 8);
+          const date = g.createdAt ? new Date(g.createdAt).toLocaleString("pt-BR") : "-";
           html += `<tr>
-            <td>${g.userId.substring(0, 8)}...</td>
+            <td>${nickname}</td>
             <td>${g.homeTeam} x ${g.awayTeam}</td>
             <td class="score-font">${g.homeScore} x ${g.awayScore}</td>
+            <td style="font-size:12px;color:var(--text-tertiary);">${date}</td>
           </tr>`;
         });
         html += '</tbody></table>';
         container.innerHTML = html;
       } catch (e) {
-        container.innerHTML = '<p style="color:var(--accent-red);">Erro ao carregar palpites.</p>';
+        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar palpites: ${e.message}</p>`;
+      }
+    }
+
+    async function loadLogs() {
+      const container = document.getElementById("logs-list");
+      try {
+        const snap = await getDocs(collection(db, "logs"));
+        if (snap.empty) {
+          container.innerHTML = '<p style="color:var(--text-tertiary);">Nenhum log registrado ainda.</p>';
+          return;
+        }
+        const logs = [];
+        snap.forEach(d => logs.push({ id: d.id, ...d.data() }));
+        logs.sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+
+        let html = '<table class="ranking-table"><thead><tr><th>Data/Hora</th><th>Ação</th><th>Detalhes</th></tr></thead><tbody>';
+        logs.slice(0, 100).forEach(l => {
+          const date = l.timestamp ? new Date(l.timestamp).toLocaleString("pt-BR") : "-";
+          html += `<tr>
+            <td style="font-size:12px;white-space:nowrap;">${date}</td>
+            <td style="font-weight:600;color:var(--accent-orange);">${l.action || "-"}</td>
+            <td style="font-size:13px;">${l.details || "-"}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      } catch (e) {
+        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar logs: ${e.message}</p>`;
+      }
+    }
+
+    async function addLog(action, details) {
+      try {
+        await setDoc(doc(db, "logs", Date.now().toString()), {
+          action,
+          details,
+          timestamp: new Date().toISOString(),
+          userEmail: auth.currentUser?.email || "unknown"
+        });
+      } catch (e) {
+        console.warn("Erro ao salvar log:", e);
       }
     }
 
@@ -226,23 +358,20 @@
           try {
             const resp = await fetch(`${BASE_URL}/${SEASON_ID}/events/round/${round}`);
             const data = await resp.json();
-
             for (const event of (data.events || [])) {
               if (event.status && event.status.code >= 100) {
                 const homeScore = event.homeScore?.current;
                 const awayScore = event.awayScore?.current;
-
                 if (homeScore !== null && homeScore !== undefined && awayScore !== null && awayScore !== undefined) {
                   await setDoc(doc(db, "matches", `sofa_${event.id}`), {
                     sofaScoreId: event.id,
                     homeTeam: event.homeTeam.name,
                     awayTeam: event.awayTeam.name,
-                    homeScore: homeScore,
-                    awayScore: awayScore,
+                    homeScore, awayScore,
                     status: "finished",
-                    round: round,
+                    round,
                     updatedAt: new Date().toISOString()
-                  });
+                  }, { merge: true });
                   updated++;
                 }
               }
@@ -255,10 +384,13 @@
         statusEl.textContent = `Sincronização concluída! ${updated} resultado(s) atualizado(s).`;
         statusEl.style.color = "var(--success)";
         showToast(`${updated} resultado(s) atualizado(s)!`, "success");
+        await addLog("SINCRONIZAÇÃO SOFASCORE", `${updated} resultado(s) atualizado(s)`);
+        loadResults();
       } catch (e) {
         statusEl.textContent = "Erro na sincronização: " + e.message;
         statusEl.style.color = "var(--accent-red)";
         showToast("Erro na sincronização", "error");
+        await addLog("ERRO SINCRONIZAÇÃO", e.message);
       } finally {
         btn.disabled = false;
       }
@@ -268,7 +400,6 @@
     document.getElementById("manual-match").addEventListener("change", (e) => {
       const matchId = parseInt(e.target.value);
       if (!matchId || !allMatchesData) return;
-
       const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
       const match = allMatches.find(m => m.id === matchId);
       if (match) {
@@ -281,16 +412,13 @@
       const matchId = document.getElementById("manual-match").value;
       const homeScore = document.getElementById("manual-home-score").value;
       const awayScore = document.getElementById("manual-away-score").value;
-
       if (!matchId || homeScore === "" || awayScore === "") {
         showToast("Preencha todos os campos.", "warning");
         return;
       }
-
       const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
       const match = allMatches.find(m => m.id === parseInt(matchId));
       if (!match) return;
-
       try {
         await setDoc(doc(db, "matches", `match_${matchId}`), {
           matchId: matchId,
@@ -299,11 +427,14 @@
           homeScore: parseInt(homeScore),
           awayScore: parseInt(awayScore),
           status: "finished",
+          manualEntry: true,
           updatedAt: new Date().toISOString()
         });
         showToast("Resultado salvo!", "success");
+        await addLog("RESULTADO MANUAL", `${match.homeTeam} ${homeScore} x ${awayScore} ${match.awayTeam}`);
         document.getElementById("manual-home-score").value = "";
         document.getElementById("manual-away-score").value = "";
+        loadResults();
       } catch (e) {
         showToast("Erro ao salvar: " + e.message, "error");
       }
@@ -322,30 +453,99 @@
       const email = document.getElementById("new-user-email").value.trim();
       const nickname = document.getElementById("new-user-nickname").value.trim();
       const password = "copa2026";
-
       if (!email || !nickname) {
         showToast("Preencha e-mail e apelido.", "warning");
         return;
       }
-
       try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await setDoc(doc(db, "users", userCredential.user.uid), {
-          email: email,
-          nickname: nickname,
-          firstName: "",
-          lastName: "",
-          photoURL: null,
-          firstAccess: true,
+          email, nickname,
+          firstName: "", lastName: "",
+          photoURL: null, firstAccess: true,
           createdAt: new Date().toISOString()
         });
         showToast(`Usuário ${nickname} criado!`, "success");
+        await addLog("USUÁRIO CRIADO", `${nickname} (${email})`);
         document.getElementById("add-user-modal").style.display = "none";
         document.getElementById("new-user-email").value = "";
         document.getElementById("new-user-nickname").value = "";
         loadUsers();
       } catch (e) {
         showToast("Erro ao criar usuário: " + e.message, "error");
+      }
+    });
+
+    // Export Excel
+    document.getElementById("btn-export-excel").addEventListener("click", async () => {
+      try {
+        const [guessSnap, userSnap, matchSnap] = await Promise.all([
+          getDocs(collection(db, "guesses")),
+          getDocs(collection(db, "users")),
+          getDocs(collection(db, "matches"))
+        ]);
+
+        const userMap = {};
+        userSnap.forEach(d => { userMap[d.id] = d.data(); });
+
+        const matchesMap = {};
+        matchSnap.forEach(d => {
+          const data = d.data();
+          matchesMap[data.matchId || d.id.replace("match_", "").replace("sofa_", "")] = data;
+        });
+
+        let csv = "Usuário,E-mail,Jogo,Mandante,Visitante,Palpite Mandante,Palpite Visitante,Resultado Oficial Mandante,Resultado Oficial Visitante,Pontos,Tipo,Data do Palpite\n";
+
+        const SCORING = { exactScore: 7, correctResult: 3, wrongResult: -1 };
+
+        guessSnap.forEach(d => {
+          const g = d.data();
+          const user = userMap[g.userId];
+          const nickname = user ? (user.nickname || user.email) : g.userId.substring(0, 8);
+          const email = user ? user.email : "";
+          const result = matchesMap[g.matchId] || matchesMap[String(g.matchId)];
+          const date = g.createdAt ? new Date(g.createdAt).toLocaleString("pt-BR") : "-";
+
+          let resultHome = "";
+          let resultAway = "";
+          let points = "";
+          let type = "Sem resultado";
+
+          if (result && result.homeScore !== null && result.homeScore !== undefined) {
+            resultHome = result.homeScore;
+            resultAway = result.awayScore;
+            if (g.homeScore === result.homeScore && g.awayScore === result.awayScore) {
+              points = SCORING.exactScore;
+              type = "Placar Exato";
+            } else if (
+              (g.homeScore > g.awayScore && result.homeScore > result.awayScore) ||
+              (g.homeScore < g.awayScore && result.homeScore < result.awayScore) ||
+              (g.homeScore === g.awayScore && result.homeScore === result.awayScore)
+            ) {
+              points = SCORING.correctResult;
+              type = "Resultado Correto";
+            } else {
+              points = SCORING.wrongResult;
+              type = "Resultado Errado";
+            }
+          }
+
+          csv += `"${nickname}","${email}","${g.homeTeam} x ${g.awayTeam}","${g.homeTeam}","${g.awayTeam}",${g.homeScore},${g.awayScore},${resultHome},${resultAway},${points},"${type}","${date}"\n`;
+        });
+
+        const BOM = "\uFEFF";
+        const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `bolao-palpites-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        showToast("Exportação concluída!", "success");
+        await addLog("EXPORTAÇÃO EXCEL", "Exportação de palpites em CSV");
+      } catch (e) {
+        showToast("Erro na exportação: " + e.message, "error");
       }
     });
 

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Histórico de Palpites - Bolão Quinta Categoria Show</title>
+  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="navbar-logo">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Logo">
+      <span>QCS BOLÃO</span>
+    </a>
+    <button class="hamburger" id="hamburger">☰</button>
+    <div class="navbar-links" id="nav-links">
+      <a href="index.html">Início</a>
+      <a href="palpites.html">Palpites</a>
+      <a href="resultados.html">Resultados</a>
+      <a href="ranking.html">Ranking</a>
+      <a href="historico.html" class="active">Histórico</a>
+      <a href="perfil.html">Perfil</a>
+      <a href="admin.html" id="nav-admin" style="display:none;">Admin</a>
+      <a href="#" id="btn-logout">Sair</a>
+    </div>
+    <div class="navbar-user" id="navbar-user" onclick="window.location.href='perfil.html'"></div>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title">MEUS PALPITES</h1>
+
+    <div id="history-container">
+      <div class="spinner"></div>
+      <p class="loading-text">Carregando histórico...</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026 &mdash; Grupo Discípulos de Pai Mei
+  </div>
+
+  <script type="module">
+    import { auth, db, checkAuth, setupNavbar } from "./js/auth.js?v=3";
+    import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+    const SCORING = { exactScore: 7, correctResult: 3, wrongResult: -1 };
+
+    async function init() {
+      const { user, profile } = await checkAuth();
+      setupNavbar(profile);
+      await loadHistory(user.uid);
+    }
+
+    function calculateScore(guessHome, guessAway, resultHome, resultAway) {
+      if (guessHome === resultHome && guessAway === resultAway) {
+        return { points: SCORING.exactScore, type: "exact", label: "Placar Exato", css: "exact" };
+      }
+      const guessResult = guessHome > guessAway ? "home" : guessHome < guessAway ? "away" : "draw";
+      const resultResult = resultHome > resultAway ? "home" : resultHome < resultAway ? "away" : "draw";
+      if (guessResult === resultResult) {
+        return { points: SCORING.correctResult, type: "correct", label: "Resultado Correto", css: "correct" };
+      }
+      return { points: SCORING.wrongResult, type: "wrong", label: "Resultado Errado", css: "wrong" };
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return "";
+      const date = new Date(dateStr);
+      return date.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    }
+
+    async function loadHistory(uid) {
+      const container = document.getElementById("history-container");
+
+      try {
+        const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", uid)));
+        const guesses = [];
+        guessSnap.forEach(d => guesses.push({ id: d.id, ...d.data() }));
+
+        if (guesses.length === 0) {
+          container.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);">Você ainda não fez nenhum palpite.</p>';
+          return;
+        }
+
+        const matchSnap = await getDocs(collection(db, "matches"));
+        const results = {};
+        matchSnap.forEach(d => {
+          const data = d.data();
+          const key = data.matchId || data.sofaScoreId || d.id.replace("match_", "").replace("sofa_", "");
+          results[key] = data;
+        });
+
+        let totalPoints = 0;
+        let exactCount = 0;
+        let correctCount = 0;
+        let wrongCount = 0;
+
+        let html = "";
+
+        guesses.sort((a, b) => (a.matchId || 0) - (b.matchId || 0));
+
+        guesses.forEach(g => {
+          const result = results[g.matchId] || results[String(g.matchId)];
+          const hasResult = result && result.homeScore !== null && result.homeScore !== undefined;
+          let score = null;
+          if (hasResult) {
+            score = calculateScore(g.homeScore, g.awayScore, result.homeScore, result.awayScore);
+            totalPoints += score.points;
+            if (score.type === "exact") exactCount++;
+            else if (score.type === "correct") correctCount++;
+            else wrongCount++;
+          }
+
+          html += `<div class="card match-card${hasResult && score ? ' match-finished' : ''}" style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <span style="font-weight:600;">${g.homeTeam}</span> 
+                <span class="score-font" style="font-size:18px;margin:0 6px;">${g.homeScore} x ${g.awayScore}</span> 
+                <span style="font-weight:600;">${g.awayTeam}</span>
+              </div>
+              ${hasResult && score ? `<span class="score-result-badge ${score.css}">${score.label} (${score.points > 0 ? '+' : ''}${score.points})</span>` : '<span style="font-size:12px;color:var(--text-tertiary);">Aguardando</span>'}
+            </div>
+            ${hasResult ? `<div style="margin-top:8px;font-size:13px;color:var(--text-tertiary);">
+              Resultado oficial: <span class="score-font" style="font-size:15px;">${result.homeScore} x ${result.awayScore}</span>
+            </div>` : ''}
+            ${g.createdAt ? `<div style="margin-top:4px;font-size:11px;color:var(--text-tertiary);">Palpite em: ${formatDate(g.createdAt)}</div>` : ''}
+          </div>`;
+        });
+
+        html = `<div class="card" style="margin-bottom:20px;text-align:center;">
+          <div style="font-size:14px;color:var(--text-tertiary);margin-bottom:8px;">Resumo dos seus palpites</div>
+          <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;">
+            <div><span style="font-family:var(--font-heading);font-size:24px;font-weight:700;color:var(--success);">${exactCount}</span><br><span style="font-size:12px;color:var(--text-tertiary);">Placar Exato</span></div>
+            <div><span style="font-family:var(--font-heading);font-size:24px;font-weight:700;color:var(--accent-orange);">${correctCount}</span><br><span style="font-size:12px;color:var(--text-tertiary);">Resultado Correto</span></div>
+            <div><span style="font-family:var(--font-heading);font-size:24px;font-weight:700;color:var(--accent-red);">${wrongCount}</span><br><span style="font-size:12px;color:var(--text-tertiary);">Resultado Errado</span></div>
+            <div><span style="font-family:var(--font-heading);font-size:24px;font-weight:700;color:${totalPoints >= 0 ? 'var(--success)' : 'var(--accent-red)'};">${totalPoints}</span><br><span style="font-size:12px;color:var(--text-tertiary);">Pontos Total</span></div>
+          </div>
+        </div>` + html;
+
+        container.innerHTML = html;
+      } catch (e) {
+        container.innerHTML = `<p style="text-align:center;color:var(--accent-red);">Erro ao carregar histórico: ${e.message}</p>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
