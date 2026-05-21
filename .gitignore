@@ -2,9 +2,13 @@
 __pycache__/
 *.pyc
 "Copa do Mundo 2026"*
+Copa do Mundo 2026*
 enderecos.txt
 https___www.sofascore.com*
 sdk-firebase-npm-e-script.txt
 usuarios-firebase.txt
 firestore-rules.txt
 .DS_Store
+*.xlsx
+extract_matches.py
+Analise_Scraper_SofaScore.md
