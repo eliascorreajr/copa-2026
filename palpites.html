@@ -4,14 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Palpites - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=6">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
   <nav class="navbar">
     <a href="index.html" class="navbar-logo">
       <img src="img/quinta-categoria-show-logo.jpg" alt="Logo">
-      <span>QCS BOLÃO</span>
     </a>
     <button class="hamburger" id="hamburger">☰</button>
     <div class="navbar-links" id="nav-links">
@@ -42,7 +41,6 @@
     Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026 &mdash; Grupo Discípulos de Pai Mei
   </div>
 
-  <!-- Confirmation Modal -->
   <div class="modal-overlay" id="confirm-modal" style="display:none;">
     <div class="modal-content">
       <h3>Confirmar Palpite</h3>
@@ -55,7 +53,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, showToast, formatDate } from "./js/auth.js?v=5";
+    import { auth, db, checkAuth, setupNavbar, showToast, formatDate } from "./js/auth.js?v=6";
     import { getDoc, doc, setDoc, deleteDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
     let currentUser = null;
@@ -63,9 +61,7 @@
     let matchesData = [];
     let userGuesses = {};
     let currentDay = null;
-
     const LOCK_MINUTES = 30;
-    const OPEN_HOUR = 6;
 
     async function init() {
       const { user, profile } = await checkAuth();
@@ -81,7 +77,6 @@
       try {
         const response = await fetch("data/matches.json");
         matchesData = await response.json();
-
         const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", currentUser.uid)));
         userGuesses = {};
         guessSnap.forEach(d => {
@@ -102,7 +97,8 @@
       const [y, m, d] = dayKey.split('-');
       const date = new Date(y, m - 1, d);
       const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      return `${weekdays[date.getDay()]} ${d}/${m}`;
+      const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+      return `${weekdays[date.getDay()]} ${d} ${months[date.getMonth()]}`;
     }
 
     function getAllDays() {
@@ -113,18 +109,11 @@
         if (!days.has(key)) days.set(key, []);
         days.get(key).push(m);
       });
-      const sorted = Array.from(days.keys()).sort();
-      const result = [];
-      for (const day of sorted) {
-        const matches = days.get(day);
-        result.push({
-          value: day,
-          label: formatDayLabel(day),
-          matches: matches,
-          stage: matches[0].stage || matches[0].group
-        });
-      }
-      return result;
+      return Array.from(days.keys()).sort().map(day => ({
+        value: day,
+        label: formatDayLabel(day),
+        matches: days.get(day)
+      }));
     }
 
     function getMatchesForDay(dayKey) {
@@ -138,16 +127,6 @@
       const earliestDate = Math.min(...matches.map(m => new Date(m.date).getTime()));
       const lockTime = earliestDate - LOCK_MINUTES * 60 * 1000;
       return Date.now() >= lockTime;
-    }
-
-    function isDayOpen(dayKey) {
-      const matches = getMatchesForDay(dayKey);
-      if (matches.length === 0) return false;
-      const earliestDate = Math.min(...matches.map(m => new Date(m.date).getTime()));
-      const matchDate = new Date(earliestDate);
-      const dayBefore = new Date(dayKey + 'T00:00:00');
-      const openTime = new Date(dayBefore.getTime() + OPEN_HOUR * 60 * 60 * 1000);
-      return Date.now() >= openTime.getTime();
     }
 
     function getLockCountdown(dayKey) {
@@ -170,27 +149,23 @@
     function setupDayTabs() {
       const tabs = document.getElementById("round-tabs");
       const days = getAllDays();
+      if (days.length === 0) return;
+
+      let currentOpenIdx = -1;
       const now = Date.now();
-      let firstOpenIdx = -1;
 
       days.forEach((day, i) => {
+        const locked = isDayLocked(day.value);
         const btn = document.createElement("button");
         btn.textContent = day.label;
         btn.dataset.day = day.value;
 
-        const locked = isDayLocked(day.value);
-        const open = isDayOpen(day.value);
-
         if (locked) {
           btn.classList.add("tab-locked");
-        } else if (open) {
-          btn.classList.add("tab-open");
-          if (firstOpenIdx === -1) firstOpenIdx = i;
         } else {
-          btn.classList.add("tab-future");
+          btn.classList.add("tab-open");
+          if (currentOpenIdx === -1) currentOpenIdx = i;
         }
-
-        if (i === 0 || (firstOpenIdx === i)) btn.classList.add("active");
 
         btn.addEventListener("click", () => {
           tabs.querySelectorAll("button").forEach(b => b.classList.remove("active"));
@@ -202,8 +177,7 @@
         tabs.appendChild(btn);
       });
 
-      currentDay = days[firstOpenIdx >= 0 ? firstOpenIdx : 0].value;
-
+      currentDay = days[currentOpenIdx >= 0 ? currentOpenIdx : 0].value;
       const activeBtn = tabs.querySelector(`[data-day="${currentDay}"]`);
       if (activeBtn) {
         tabs.querySelectorAll("button").forEach(b => b.classList.remove("active"));
@@ -232,35 +206,8 @@
 
       const matches = getMatchesForDay(currentDay);
       const locked = isDayLocked(currentDay);
-      const open = isDayOpen(currentDay);
       const countdown = getLockCountdown(currentDay);
-
       let html = "";
-
-      if (!open && !locked) {
-        const dayDate = new Date(currentDay + 'T00:00:00');
-        const openTime = new Date(dayDate.getTime() + OPEN_HOUR * 60 * 60 * 1000);
-        const openLabel = openTime.toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        html += `<div style="text-align:center;margin-bottom:16px;padding:16px;background:rgba(244,124,32,0.1);border-radius:8px;">
-          <span style="font-size:14px;">⏰ Palpites abrem às <strong>${openLabel}</strong> do dia desta rodada</span>
-        </div>`;
-        matches.forEach(m => {
-          const groupLabel = m.group ? `Grupo ${m.group}` : stageLabel(m.stage);
-          html += `<div class="card match-card match-locked animate-fade-in">
-            <div class="match-header">
-              <span class="match-group-badge">${groupLabel}</span>
-              <span style="color:var(--text-tertiary);font-size:12px;">${formatDate(m.date)}</span>
-            </div>
-            <div class="match-teams">
-              <div style="flex:1;text-align:center;"><div class="team-name">${m.homeTeam}</div></div>
-              <div class="score-input"><span class="vs">x</span></div>
-              <div style="flex:1;text-align:center;"><div class="team-name">${m.awayTeam}</div></div>
-            </div>
-          </div>`;
-        });
-        container.innerHTML = html;
-        return;
-      }
 
       if (countdown) {
         html += `<div style="text-align:center;margin-bottom:16px;">
@@ -270,7 +217,9 @@
       }
 
       if (locked) {
-        html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(212,57,28,0.15);border-radius:8px;color:var(--accent-red);font-weight:600;">🔒 Palpites travados para esta rodada</div>`;
+        html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(212,57,28,0.15);border-radius:8px;color:var(--accent-red);font-weight:600;">🔒 Palpites travados para este dia</div>`;
+      } else {
+        html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(46,204,113,0.1);border-radius:8px;color:var(--success);font-weight:600;">✅ Palpites abertos — preencha e salve!</div>`;
       }
 
       matches.forEach(m => {
@@ -278,10 +227,11 @@
         const groupLabel = m.group ? `Grupo ${m.group}` : stageLabel(m.stage);
         const homeVal = existing ? existing.homeScore : '';
         const awayVal = existing ? existing.awayScore : '';
+        const roundLabel = m.round ? `R${m.round}` : '';
 
         html += `<div class="card match-card ${locked ? 'match-locked' : ''} ${existing ? 'match-has-guess' : ''} animate-fade-in">
           <div class="match-header">
-            <span class="match-group-badge">${groupLabel}</span>
+            <span class="match-group-badge">${groupLabel} ${roundLabel}</span>
             <span style="color:var(--text-tertiary);font-size:12px;">${formatDate(m.date)}</span>
             ${existing && !locked ? '<span style="color:var(--success);font-size:11px;font-weight:600;">✓ Salvo</span>' : ''}
           </div>
@@ -304,7 +254,7 @@
       if (!locked && matches.length > 0) {
         html += `<div style="text-align:center;margin-top:24px;">
           <button class="btn btn-primary" id="btn-save-all">Salvar Palpites</button>
-          ${Object.keys(userGuesses).length > 0 ? '<button class="btn btn-secondary" id="btn-clear-guesses" style="margin-left:8px;">Limpar Meus Palpites desta Rodada</button>' : ''}
+          ${Object.keys(userGuesses).length > 0 ? ' <button class="btn btn-secondary" id="btn-clear-guesses" style="margin-left:8px;">Limpar Palpites deste Dia</button>' : ''}
         </div>`;
       }
 
@@ -313,7 +263,6 @@
       if (!locked && matches.length > 0) {
         const saveBtn = document.getElementById("btn-save-all");
         if (saveBtn) saveBtn.addEventListener("click", handleSaveAll);
-
         const clearBtn = document.getElementById("btn-clear-guesses");
         if (clearBtn) clearBtn.addEventListener("click", handleClearGuesses);
       }
@@ -327,21 +276,13 @@
       matches.forEach(m => {
         const homeInput = document.querySelector(`.home-score[data-match="${m.id}"]`);
         const awayInput = document.querySelector(`.away-score[data-match="${m.id}"]`);
-
         if (homeInput && awayInput) {
           const homeScore = homeInput.value.trim();
           const awayScore = awayInput.value.trim();
-
           if (homeScore === "" || awayScore === "") {
             hasEmpty = true;
           } else {
-            guesses.push({
-              matchId: m.id,
-              homeScore: parseInt(homeScore),
-              awayScore: parseInt(awayScore),
-              homeTeam: m.homeTeam,
-              awayTeam: m.awayTeam
-            });
+            guesses.push({ matchId: m.id, homeScore: parseInt(homeScore), awayScore: parseInt(awayScore), homeTeam: m.homeTeam, awayTeam: m.awayTeam });
           }
         }
       });
@@ -350,7 +291,6 @@
         showToast("Preencha todos os placares antes de salvar.", "warning");
         return;
       }
-
       if (guesses.length === 0) {
         showToast("Nenhum palpite para salvar.", "warning");
         return;
@@ -358,7 +298,7 @@
 
       const modal = document.getElementById("confirm-modal");
       const textEl = document.getElementById("confirm-modal-text");
-      textEl.innerHTML = `Você está prestes a confirmar <strong>${guesses.length}</strong> palpite(s).<br>Você pode alterar seus palpites enquanto a rodada estiver aberta.<br><br>Confirma?`;
+      textEl.innerHTML = `Confirmar <strong>${guesses.length}</strong> palpite(s)?<br>Você pode alterar enquanto a rodada estiver aberta.`;
       modal.style.display = "flex";
 
       document.getElementById("btn-confirm-guess").onclick = async () => {
@@ -376,57 +316,45 @@
               createdAt: userGuesses[g.matchId]?.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString()
             }, { merge: true });
-            userGuesses[g.matchId] = {
-              userId: currentUser.uid,
-              matchId: g.matchId,
-              homeTeam: g.homeTeam,
-              awayTeam: g.awayTeam,
-              homeScore: g.homeScore,
-              awayScore: g.awayScore,
-              locked: true,
-              createdAt: userGuesses[g.matchId]?.createdAt || new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            };
+            userGuesses[g.matchId] = { userId: currentUser.uid, matchId: g.matchId, homeTeam: g.homeTeam, awayTeam: g.awayTeam, homeScore: g.homeScore, awayScore: g.awayScore };
           }
-          showToast("Palpites salvos! Você pode alterar enquanto a rodada estiver aberta.", "success");
+          showToast("Palpites salvos! Você pode alterar enquanto estiver aberto.", "success");
           renderMatches();
         } catch (e) {
           showToast("Erro ao salvar palpites: " + e.message, "error");
         }
       };
 
-      document.getElementById("btn-cancel-guess").onclick = () => {
-        modal.style.display = "none";
-      };
+      document.getElementById("btn-cancel-guess").onclick = () => { modal.style.display = "none"; };
     }
 
     async function handleClearGuesses() {
       const matches = getMatchesForDay(currentDay);
       const modal = document.getElementById("confirm-modal");
       const textEl = document.getElementById("confirm-modal-text");
-      textEl.innerHTML = `Tem certeza que deseja <strong>limpar</strong> seus palpites desta rodada?<br>Você poderá preencher novamente depois.`;
+      textEl.innerHTML = `Limpar seus palpites deste dia? Você poderá preencher novamente.`;
       modal.style.display = "flex";
 
       document.getElementById("btn-confirm-guess").onclick = async () => {
         modal.style.display = "none";
         try {
+          let cleared = 0;
           for (const m of matches) {
             const guessId = `${currentUser.uid}_match_${m.id}`;
             if (userGuesses[m.id]) {
               await deleteDoc(doc(db, "guesses", guessId));
               delete userGuesses[m.id];
+              cleared++;
             }
           }
-          showToast("Palpites limpos com sucesso!", "success");
+          showToast(cleared > 0 ? `${cleared} palpite(s) removido(s)!` : "Nenhum palpite para remover.", "success");
           renderMatches();
         } catch (e) {
           showToast("Erro ao limpar palpites: " + e.message, "error");
         }
       };
 
-      document.getElementById("btn-cancel-guess").onclick = () => {
-        modal.style.display = "none";
-      };
+      document.getElementById("btn-cancel-guess").onclick = () => { modal.style.display = "none"; };
     }
 
     init();
