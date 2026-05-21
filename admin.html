@@ -145,6 +145,7 @@
     <div class="modal-content">
       <h3>Editar Usuário</h3>
       <input type="hidden" id="edit-user-uid">
+        <input type="hidden" id="edit-user-original-email">
       <div class="form-group">
         <label for="edit-user-nickname">Apelido</label>
         <input type="text" id="edit-user-nickname" placeholder="Apelido do participante">
@@ -161,7 +162,9 @@
         <label for="edit-user-lastname">Sobrenome</label>
         <input type="text" id="edit-user-lastname" placeholder="Sobrenome">
       </div>
-      <small style="color:var(--accent-orange);display:block;margin-bottom:16px;">Altere o e-mail aqui para atualizar o perfil no Firestore. O e-mail de login no Firebase Auth deve ser alterado manualmente no Firebase Console.</small>
+      <div id="edit-email-warning" style="display:none;padding:12px;background:rgba(244,124,32,0.1);border:1px solid var(--accent-orange);border-radius:8px;margin-bottom:12px;font-size:13px;color:var(--accent-orange);">
+        O e-mail foi alterado. Isso vai <strong>migrar o usuário</strong> para uma nova conta de login com o novo e-mail, mantendo todos os palpites e o ranking. A conta antiga precisará ser excluída manualmente no Firebase Console.
+      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" id="btn-cancel-edit-user">Cancelar</button>
         <button class="btn btn-primary" id="btn-confirm-edit-user">Salvar</button>
@@ -324,11 +327,19 @@
               if (userDoc.exists()) {
                 const data = userDoc.data();
                 document.getElementById("edit-user-uid").value = uid;
+                document.getElementById("edit-user-original-email").value = data.email || "";
                 document.getElementById("edit-user-nickname").value = data.nickname || "";
                 document.getElementById("edit-user-email").value = data.email || "";
                 document.getElementById("edit-user-firstname").value = data.firstName || "";
                 document.getElementById("edit-user-lastname").value = data.lastName || "";
+                document.getElementById("edit-email-warning").style.display = "none";
                 document.getElementById("edit-user-modal").style.display = "flex";
+
+                document.getElementById("edit-user-email").oninput = () => {
+                  const original = document.getElementById("edit-user-original-email").value;
+                  const current = document.getElementById("edit-user-email").value.trim();
+                  document.getElementById("edit-email-warning").style.display = (current !== original) ? "block" : "none";
+                };
               }
             } catch (e) {
               showToast("Erro ao carregar dados do usuário: " + e.message, "error");
@@ -602,6 +613,7 @@
 
     document.getElementById("btn-confirm-edit-user").addEventListener("click", async () => {
       const uid = document.getElementById("edit-user-uid").value;
+      const originalEmail = document.getElementById("edit-user-original-email").value;
       const nickname = document.getElementById("edit-user-nickname").value.trim();
       const email = document.getElementById("edit-user-email").value.trim();
       const firstName = document.getElementById("edit-user-firstname").value.trim();
@@ -612,23 +624,74 @@
         return;
       }
 
+      const emailChanged = email !== originalEmail;
+
       try {
-        const updateData = {
-          nickname,
-          email,
-          firstName,
-          lastName,
-          displayName: `${nickname} - vulgo ${firstName} ${lastName}`
-        };
+        if (emailChanged) {
+          if (!confirm(`Atenção: O e-mail será alterado de "${originalEmail}" para "${email}".\n\nIsso vai:\n1. Criar uma nova conta de login com o novo e-mail e uma senha temporária\n2. Migrar todos os palpites e perfil para a nova conta\n3. Excluir o perfil antigo do Firestore\n\nA conta antiga no Firebase Auth precisará ser excluída manualmente no Firebase Console.\n\nContinuar?`)) {
+            return;
+          }
 
-        await updateDoc(doc(db, "users", uid), updateData);
+          const btn = document.getElementById("btn-confirm-edit-user");
+          btn.disabled = true;
+          btn.textContent = "Migrando...";
 
-        showToast(`Usuário ${nickname} atualizado!`, "success");
-        await addLog("USUÁRIO EDITADO", `${nickname} (${email})`);
-        document.getElementById("edit-user-modal").style.display = "none";
-        loadUsers();
+          const tempPassword = Math.random().toString(36).slice(2, 10);
+          const newUserCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
+          const newUid = newUserCredential.user.uid;
+
+          await setDoc(doc(db, "users", newUid), {
+            email,
+            nickname,
+            firstName,
+            lastName,
+            displayName: `${nickname} - vulgo ${firstName} ${lastName}`,
+            photoURL: null,
+            firstAccess: true,
+            migratedFrom: uid,
+            createdAt: new Date().toISOString()
+          });
+
+          const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", uid)));
+          const migratePromises = [];
+          guessSnap.forEach(g => {
+            migratePromises.push(
+              updateDoc(doc(db, "guesses", g.id), { userId: newUid })
+            );
+          });
+          await Promise.all(migratePromises);
+
+          await deleteDoc(doc(db, "users", uid));
+
+          await addLog("USUÁRIO MIGRADO", `${originalEmail} (${uid}) → ${email} (${newUid}). ${migratePromises.length} palpite(s) migrado(s).`);
+
+          showToast(`Usuário migrado! Novo login: ${email} — Senha temporária: ${tempPassword}`, "success");
+
+          document.getElementById("edit-user-modal").style.display = "none";
+          btn.disabled = false;
+          btn.textContent = "Salvar";
+          loadUsers();
+        } else {
+          const updateData = {
+            nickname,
+            email,
+            firstName,
+            lastName,
+            displayName: `${nickname} - vulgo ${firstName} ${lastName}`
+          };
+
+          await updateDoc(doc(db, "users", uid), updateData);
+
+          showToast(`Usuário ${nickname} atualizado!`, "success");
+          await addLog("USUÁRIO EDITADO", `${nickname} (${email})`);
+          document.getElementById("edit-user-modal").style.display = "none";
+          loadUsers();
+        }
       } catch (e) {
-        showToast("Erro ao atualizar usuário: " + e.message, "error");
+        showToast("Erro: " + e.message, "error");
+        const btn = document.getElementById("btn-confirm-edit-user");
+        btn.disabled = false;
+        btn.textContent = "Salvar";
       }
     });
 
