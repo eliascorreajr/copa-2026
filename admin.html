@@ -640,16 +640,19 @@
           const newUserCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
           const newUid = newUserCredential.user.uid;
 
+          const oldUserDoc = await getDoc(doc(db, "users", uid));
+          const oldData = oldUserDoc.exists() ? oldUserDoc.data() : {};
+
           await setDoc(doc(db, "users", newUid), {
             email,
             nickname,
             firstName,
             lastName,
             displayName: `${nickname} - vulgo ${firstName} ${lastName}`,
-            photoURL: null,
-            firstAccess: true,
+            photoURL: oldData.photoURL || null,
+            firstAccess: false,
             migratedFrom: uid,
-            createdAt: new Date().toISOString()
+            createdAt: oldData.createdAt || new Date().toISOString()
           });
 
           const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", uid)));
