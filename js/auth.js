@@ -64,7 +64,7 @@ window.location.href = "login.html";
       }
 
       if (requiredRole === "admin" && !isAdmin(user)) {
-        window.location.href = "palpites.html";
+        window.location.href = "index.html";
         return;
       }
 

@@ -58,10 +58,8 @@
           const profile = userDoc.data();
           if (!profile.firstName || !profile.lastName) {
             window.location.href = "primeiro-acesso.html";
-          } else if (email === "admin@bolao.com") {
-            window.location.href = "admin.html";
           } else {
-            window.location.href = "palpites.html";
+            window.location.href = "index.html";
           }
         } else {
           window.location.href = "primeiro-acesso.html";

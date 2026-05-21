@@ -580,6 +580,135 @@ a:hover {
   .rule-desc {
     display: none;
   }
+
+  .participants-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Home page */
+.home-hero {
+  text-align: center;
+  padding: 32px 0 16px;
+}
+
+.home-logo {
+  width: 220px;
+  max-width: 70%;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  object-fit: contain;
+}
+
+.home-title {
+  font-family: var(--font-heading);
+  color: var(--accent-orange);
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.home-subtitle {
+  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.home-crew {
+  color: var(--text-tertiary);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.home-crew strong {
+  color: var(--accent-orange);
+}
+
+.home-section {
+  margin-bottom: 32px;
+}
+
+.section-title {
+  color: var(--accent-orange);
+  font-family: var(--font-heading);
+  font-size: 18px;
+  text-align: center;
+  margin-bottom: 20px;
+  letter-spacing: 1px;
+}
+
+.participants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+  justify-items: center;
+}
+
+.participant-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--border-radius);
+  padding: 20px 16px;
+  text-align: center;
+  transition: var(--transition-fast);
+  width: 100%;
+}
+
+.participant-card:hover {
+  border-color: var(--accent-orange);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.participant-card img {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid var(--accent-orange);
+  object-fit: cover;
+  margin-bottom: 12px;
+}
+
+.participant-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid var(--accent-orange);
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 28px;
+  margin: 0 auto 12px;
+}
+
+.participant-nickname {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.participant-name {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.home-info {
+  text-align: center;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius);
+  margin-bottom: 24px;
+}
+
+.home-info p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.home-info strong {
+  color: var(--accent-orange);
 }
 
 /* Login page */

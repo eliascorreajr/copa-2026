@@ -3,57 +3,127 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quinta Categoria Show - Bolão Copa do Mundo 2026</title>
+  <title>Quinta Categoria Show - Bolão Copa 2026</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
-  <div class="landing-container">
-    <div class="landing-card animate-fade-in">
-      <img src="img/quinta-categoria-show-logo.jpg" alt="Quinta Categoria Show" class="landing-logo">
+  <nav class="navbar">
+    <a href="index.html" class="navbar-logo">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Logo">
+      <span>QCS BOLÃO</span>
+    </a>
+    <button class="hamburger" id="hamburger">☰</button>
+    <div class="navbar-links" id="nav-links">
+      <a href="index.html" class="active">Início</a>
+      <a href="palpites.html">Palpites</a>
+      <a href="ranking.html">Ranking</a>
+      <a href="perfil.html">Perfil</a>
+      <a href="admin.html" id="nav-admin" style="display:none;">Admin</a>
+      <a href="#" id="btn-logout">Sair</a>
+    </div>
+    <div class="navbar-user" id="navbar-user" onclick="window.location.href='perfil.html'"></div>
+  </nav>
 
-      <h1 class="landing-title">QUINTA CATEGORIA SHOW</h1>
-      <h2 class="landing-subtitle">Bolão Copa do Mundo 2026</h2>
+  <div class="container">
+    <div class="home-hero animate-fade-in">
+      <img src="img/quinta-categoria-show-logo.jpg" alt="Quinta Categoria Show" class="home-logo">
+      <h1 class="home-title">QUINTA CATEGORIA SHOW</h1>
+      <h2 class="home-subtitle">Bolão Copa do Mundo 2026</h2>
+      <p class="home-crew">Grupo <strong>Discípulos de Pai Mei</strong></p>
+    </div>
 
-      <div class="landing-description">
-        <p>Bem-vindo ao bolão oficial do <strong>Grupo Discípulos de Pai Mei</strong>, que originou o lendário <strong>Quinta Categoria Show</strong>!</p>
-        <p>Aqui a rivalidade é séria, as polêmicas são garantidas e quem erra o placar paga o pato. Faça seus palpites, acompanhe o ranking e mostre que você entende de bola — ou sofra as consequências.</p>
+    <div class="home-section animate-slide-up">
+      <h3 class="section-title">Participantes</h3>
+      <div class="participants-grid" id="participants-grid">
+        <div class="spinner"></div>
+        <p class="loading-text">Carregando participantes...</p>
       </div>
+    </div>
 
-      <div class="landing-rules">
-        <h3>Regras de Pontuação</h3>
-        <div class="rules-grid">
-          <div class="rule-card rule-exact">
-            <div class="rule-icon">🎯</div>
-            <div class="rule-label">Placar Exato</div>
-            <div class="rule-points">+7 pontos</div>
-            <div class="rule-desc">Acertou o placar certinho? É muito bola.</div>
-          </div>
-          <div class="rule-card rule-correct">
-            <div class="rule-icon">✓</div>
-            <div class="rule-label">Resultado Correto</div>
-            <div class="rule-points">+3 pontos</div>
-            <div class="rule-desc">Não acertou o placar, mas matou quem ganhou. Média.</div>
-          </div>
-          <div class="rule-card rule-wrong">
-            <div class="rule-icon">✗</div>
-            <div class="rule-label">Resultado Errado</div>
-            <div class="rule-points">-1 ponto</div>
-            <div class="rule-desc">Errou de vez? Toma essa. Quinta categoria!</div>
-          </div>
+    <div class="home-section animate-slide-up">
+      <h3 class="section-title">Regras de Pontuação</h3>
+      <div class="rules-grid">
+        <div class="rule-card rule-exact">
+          <div class="rule-icon">🎯</div>
+          <div class="rule-label">Placar Exato</div>
+          <div class="rule-points">+7 pontos</div>
+          <div class="rule-desc">Acertou o placar certinho? Muito bola.</div>
+        </div>
+        <div class="rule-card rule-correct">
+          <div class="rule-icon">✓</div>
+          <div class="rule-label">Resultado Correto</div>
+          <div class="rule-points">+3 pontos</div>
+          <div class="rule-desc">Não acertou o placar, mas matou quem ganhou.</div>
+        </div>
+        <div class="rule-card rule-wrong">
+          <div class="rule-icon">✗</div>
+          <div class="rule-label">Resultado Errado</div>
+          <div class="rule-points">-1 ponto</div>
+          <div class="rule-desc">Errou de vez? Quinta categoria!</div>
         </div>
       </div>
+    </div>
 
-      <div class="landing-info">
-        <p>Os palpites travam <strong>30 minutos antes</strong> de cada jogo. Depois disso, é só torcer.</p>
-      </div>
-
-      <a href="login.html" class="btn btn-primary landing-btn">Entrar no Bolão</a>
+    <div class="home-info animate-slide-up">
+      <p>Os palpites travam <strong>30 minutos antes</strong> de cada jogo. Depois disso, é só torcer.</p>
     </div>
   </div>
 
-  <div class="footer" style="margin-top:0;">
+  <div class="footer">
     Bolão Quinta Categoria Show &mdash; Copa do Mundo 2026 &mdash; Grupo Discípulos de Pai Mei
   </div>
+
+  <script type="module">
+    import { auth, db, checkAuth, setupNavbar, isAdmin } from "./js/auth.js";
+    import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+    async function init() {
+      const { user, profile } = await checkAuth();
+      setupNavbar(profile);
+      await loadParticipants();
+    }
+
+    async function loadParticipants() {
+      const container = document.getElementById("participants-grid");
+      try {
+        const snap = await getDocs(collection(db, "users"));
+        const users = [];
+        snap.forEach(d => {
+          const data = d.data();
+          if (data.email === "admin@bolao.com") return;
+          users.push({ uid: d.id, ...data });
+        });
+
+        if (users.length === 0) {
+          container.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);">Nenhum participante cadastrado ainda.</p>';
+          return;
+        }
+
+        let html = "";
+        users.forEach(u => {
+          const avatar = u.photoURL
+            ? `<img src="${u.photoURL}" alt="${u.nickname}">`
+            : `<div class="participant-placeholder">${(u.firstName || u.nickname || "?")[0].toUpperCase()}</div>`;
+
+          const name = u.firstName
+            ? `${u.firstName} ${u.lastName || ""}`
+            : "";
+
+          html += `<div class="participant-card">
+            ${avatar}
+            <div class="participant-nickname">${u.nickname || u.email}</div>
+            ${name ? `<div class="participant-name">${name}</div>` : ""}
+          </div>`;
+        });
+
+        container.innerHTML = html;
+      } catch (e) {
+        container.innerHTML = '<p style="text-align:center;color:var(--accent-red);">Erro ao carregar participantes.</p>';
+      }
+    }
+
+    init();
+  </script>
 </body>
 </html>
