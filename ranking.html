@@ -39,7 +39,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar } from "./js/auth.js";
+    import { auth, db, checkAuth, setupNavbar } from "./js/auth.js?v=2";
     import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
     const SCORING = { exactScore: 7, correctResult: 3, wrongResult: -1 };
