@@ -42,6 +42,7 @@
   <script type="module">
     import { auth, db, checkAuth, setupNavbar } from "./js/auth.js?v=6";
     import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { buildResultLookup } from "./js/sofascore.js?v=6";
 
     const SCORING = { exactScore: 7, correctResult: 3, wrongResult: -1 };
 
@@ -83,12 +84,7 @@
         }
 
         const matchSnap = await getDocs(collection(db, "matches"));
-        const results = {};
-        matchSnap.forEach(d => {
-          const data = d.data();
-          const key = data.matchId || data.sofaScoreId || d.id.replace("match_", "").replace("sofa_", "");
-          results[key] = data;
-        });
+        const results = buildResultLookup(matchSnap);
 
         let totalPoints = 0;
         let exactCount = 0;
@@ -100,7 +96,7 @@
         guesses.sort((a, b) => (a.matchId || 0) - (b.matchId || 0));
 
         guesses.forEach(g => {
-          const result = results[g.matchId] || results[String(g.matchId)];
+          const result = results[g.matchId] || results[String(g.matchId)] || results[`${g.homeTeam}|${g.awayTeam}`];
           const hasResult = result && result.homeScore !== null && result.homeScore !== undefined;
           let score = null;
           if (hasResult) {

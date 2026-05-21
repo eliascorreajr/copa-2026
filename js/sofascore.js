@@ -36,6 +36,22 @@ function translateName(englishName) {
   return NAME_TRANSLATION[englishName] || englishName;
 }
 
+function buildMatchLookup(matchesData) {
+  const lookup = {};
+  if (!matchesData) return lookup;
+  const allMatches = [
+    ...(matchesData.groupMatches || []),
+    ...(matchesData.knockoutMatches || [])
+  ];
+  for (const m of allMatches) {
+    if (m.homeTeam && m.awayTeam && m.homeTeam !== "TBD" && m.awayTeam !== "TBD") {
+      const key = `${m.homeTeam}|${m.awayTeam}`;
+      lookup[key] = m;
+    }
+  }
+  return lookup;
+}
+
 export async function fetchRoundEvents(round) {
   const url = `${SOFASCORE_BASE_URL}/events/round/${round}`;
   const response = await fetch(url);
@@ -43,11 +59,13 @@ export async function fetchRoundEvents(round) {
   return await response.json();
 }
 
-export async function syncAllResults(db) {
+export async function syncAllResults(db, matchesData) {
   const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js");
   const rounds = [1, 2, 3, 6, 5, 27, 28, 50, 29];
   let updated = 0;
   let errors = 0;
+
+  const matchLookup = buildMatchLookup(matchesData);
 
   for (const round of rounds) {
     try {
@@ -61,11 +79,27 @@ export async function syncAllResults(db) {
           const awayScore = event.awayScore?.current;
 
           if (homeScore !== null && homeScore !== undefined && awayScore !== null && awayScore !== undefined) {
+            const homeTeam = translateName(event.homeTeam.name);
+            const awayTeam = translateName(event.awayTeam.name);
             const stageInfo = ROUNDS_MAP[round] || {};
-            await setDoc(doc(db, "matches", `sofa_${event.id}`), {
+
+            const matchKey = `${homeTeam}|${awayTeam}`;
+            const matchedMatch = matchLookup[matchKey];
+
+            let docId, matchId;
+            if (matchedMatch) {
+              docId = `match_${matchedMatch.id}`;
+              matchId = matchedMatch.id;
+            } else {
+              docId = `sofa_${event.id}`;
+              matchId = null;
+            }
+
+            await setDoc(doc(db, "matches", docId), {
               sofaScoreId: event.id,
-              homeTeam: translateName(event.homeTeam.name),
-              awayTeam: translateName(event.awayTeam.name),
+              matchId: matchId,
+              homeTeam,
+              awayTeam,
               homeTeamOriginal: event.homeTeam.name,
               awayTeamOriginal: event.awayTeam.name,
               homeTeamCode: event.homeTeam.nameCode,
@@ -90,6 +124,35 @@ export async function syncAllResults(db) {
   }
 
   return { updated, errors };
+}
+
+export function buildResultLookup(matchesSnap) {
+  const lookup = {};
+  matchesSnap.forEach(d => {
+    const data = d.data();
+    const hasScore = data.homeScore !== null && data.homeScore !== undefined
+                  && data.awayScore !== null && data.awayScore !== undefined;
+    if (!hasScore) return;
+
+    if (data.matchId != null) {
+      lookup[data.matchId] = data;
+      lookup[String(data.matchId)] = data;
+    }
+
+    const teamKey = `${data.homeTeam}|${data.awayTeam}`;
+    lookup[teamKey] = data;
+
+    if (d.id) {
+      const numericId = d.id.replace("match_", "").replace("sofa_", "");
+      lookup[numericId] = data;
+    }
+
+    if (data.sofaScoreId) {
+      lookup[`sofa_${data.sofaScoreId}`] = data;
+      lookup[String(data.sofaScoreId)] = data;
+    }
+  });
+  return lookup;
 }
 
 export { NAME_TRANSLATION, ROUNDS_MAP };

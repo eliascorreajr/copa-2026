@@ -144,6 +144,7 @@
     import { auth, db, checkAuth, setupNavbar, showToast, isAdmin } from "./js/auth.js?v=6";
     import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+    import { syncAllResults } from "./js/sofascore.js?v=6";
 
     let allMatchesData = null;
 
@@ -365,7 +366,6 @@
       }
     }
 
-    // Sync SofaScore
     document.getElementById("btn-sync").addEventListener("click", async () => {
       const statusEl = document.getElementById("sync-status");
       const btn = document.getElementById("btn-sync");
@@ -374,42 +374,11 @@
       statusEl.style.color = "var(--accent-orange)";
 
       try {
-        const SEASON_ID = 58210;
-        const BASE_URL = "https://api.sofascore.com/api/v1/unique-tournament/16/season";
-        const rounds = [1, 2, 3, 6, 5, 27, 28, 50, 29];
-        let updated = 0;
-
-        for (const round of rounds) {
-          try {
-            const resp = await fetch(`${BASE_URL}/${SEASON_ID}/events/round/${round}`);
-            const data = await resp.json();
-            for (const event of (data.events || [])) {
-              if (event.status && event.status.code >= 100) {
-                const homeScore = event.homeScore?.current;
-                const awayScore = event.awayScore?.current;
-                if (homeScore !== null && homeScore !== undefined && awayScore !== null && awayScore !== undefined) {
-                  await setDoc(doc(db, "matches", `sofa_${event.id}`), {
-                    sofaScoreId: event.id,
-                    homeTeam: event.homeTeam.name,
-                    awayTeam: event.awayTeam.name,
-                    homeScore, awayScore,
-                    status: "finished",
-                    round,
-                    updatedAt: new Date().toISOString()
-                  }, { merge: true });
-                  updated++;
-                }
-              }
-            }
-          } catch (roundErr) {
-            console.warn(`Erro na rodada ${round}:`, roundErr);
-          }
-        }
-
-        statusEl.textContent = `Sincronização concluída! ${updated} resultado(s) atualizado(s).`;
+        const result = await syncAllResults(db, allMatchesData);
+        statusEl.textContent = `Sincronização concluída! ${result.updated} resultado(s) atualizado(s).`;
         statusEl.style.color = "var(--success)";
-        showToast(`${updated} resultado(s) atualizado(s)!`, "success");
-        await addLog("SINCRONIZAÇÃO SOFASCORE", `${updated} resultado(s) atualizado(s)`);
+        showToast(`${result.updated} resultado(s) atualizado(s)!`, "success");
+        await addLog("SINCRONIZAÇÃO SOFASCORE", `${result.updated} resultado(s) atualizado(s), ${result.errors} erro(s)`);
         loadResults();
       } catch (e) {
         statusEl.textContent = "Erro na sincronização: " + e.message;
