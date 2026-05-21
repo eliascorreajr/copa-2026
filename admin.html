@@ -289,6 +289,7 @@
             <div style="color:var(--text-tertiary);font-size:13px;">${u.email}</div>
             <div style="display:flex;gap:6px;">
               <button class="btn btn-secondary btn-sm" data-edit-user="${d.id}" style="padding:4px 10px;font-size:12px;">Editar</button>
+              <button class="btn btn-secondary btn-sm" data-reset-password="${d.id}" data-user-email="${u.email}" data-user-nickname="${u.nickname || u.email}" style="padding:4px 10px;font-size:12px;">Redefinir Senha</button>
               ${!isAdminUser ? `<button class="btn btn-danger btn-sm" data-delete-user="${d.id}" data-user-email="${u.email}" style="padding:4px 10px;font-size:12px;">Remover</button>` : ""}
             </div>
           </div>`;
@@ -316,6 +317,12 @@
                 showToast("Erro ao remover: " + e.message, "error");
               }
             }
+          });
+        });
+
+        container.querySelectorAll("[data-reset-password]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            handleResetPassword(btn.dataset.resetPassword, btn.dataset.userEmail, btn.dataset.userNickname);
           });
         });
 
@@ -349,6 +356,103 @@
       } catch (e) {
         container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar usuários: ${e.message}</p>`;
       }
+    }
+
+    function handleResetPassword(uid, email, nickname) {
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay";
+      modal.style.display = "flex";
+      modal.innerHTML = `<div class="modal-content">
+        <h3>Redefinir Senha de ${nickname}</h3>
+        <p style="color:var(--text-secondary);margin-bottom:16px;">Isso vai criar uma nova senha para o usuário <strong>${email}</strong>.</p>
+        <div class="form-group">
+          <label for="reset-new-password">Nova Senha</label>
+          <input type="text" id="reset-new-password" value="${Math.random().toString(36).slice(2, 10)}" style="font-family:var(--font-heading);font-size:18px;letter-spacing:1px;">
+          <small style="color:var(--text-tertiary);">Você pode editar a senha antes de confirmar. Mínimo 6 caracteres.</small>
+        </div>
+        <small style="color:var(--accent-orange);display:block;margin-bottom:16px;"><strong>Antes de confirmar:</strong> você precisa excluir a conta de autenticação atual deste usuário no Firebase Console → Authentication → Users. Caso contrário, a criação da nova conta vai falhar (e-mail já em uso).</small>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="btn-cancel-reset">Cancelar</button>
+          <button class="btn btn-primary" id="btn-confirm-reset">Redefinir Senha</button>
+        </div>
+      </div>`;
+      document.body.appendChild(modal);
+
+      document.getElementById("btn-cancel-reset").addEventListener("click", () => modal.remove());
+      document.getElementById("btn-confirm-reset").addEventListener("click", async () => {
+        const newPassword = document.getElementById("reset-new-password").value.trim();
+        if (newPassword.length < 6) {
+          showToast("A senha deve ter pelo menos 6 caracteres.", "warning");
+          return;
+        }
+
+        const btn = document.getElementById("btn-confirm-reset");
+        btn.disabled = true;
+        btn.textContent = "Criando...";
+
+        try {
+          const userDoc = await getDoc(doc(db, "users", uid));
+          if (!userDoc.exists()) {
+            showToast("Usuário não encontrado no Firestore.", "error");
+            btn.disabled = false;
+            btn.textContent = "Redefinir Senha";
+            return;
+          }
+          const userData = userDoc.data();
+
+          const newUserCredential = await createUserWithEmailAndPassword(auth, email, newPassword);
+          const newUid = newUserCredential.user.uid;
+
+          await setDoc(doc(db, "users", newUid), {
+            email: userData.email,
+            nickname: userData.nickname || userData.email,
+            firstName: userData.firstName || "",
+            lastName: userData.lastName || "",
+            displayName: userData.displayName || "",
+            photoURL: userData.photoURL || null,
+            firstAccess: false,
+            migratedFrom: uid,
+            createdAt: userData.createdAt || new Date().toISOString()
+          });
+
+          const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", uid)));
+          const migratePromises = [];
+          guessSnap.forEach(g => {
+            migratePromises.push(updateDoc(doc(db, "guesses", g.id), { userId: newUid }));
+          });
+          await Promise.all(migratePromises);
+
+          await deleteDoc(doc(db, "users", uid));
+
+          modal.remove();
+
+          const resultModal = document.createElement("div");
+          resultModal.className = "modal-overlay";
+          resultModal.style.display = "flex";
+          resultModal.innerHTML = `<div class="modal-content">
+            <h3>Senha Redefinida!</h3>
+            <div style="text-align:left;margin:16px 0;padding:16px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--bg-tertiary);">
+              <p style="margin-bottom:8px;"><strong>Usuário:</strong> ${userData.nickname || userData.email}</p>
+              <p style="margin-bottom:8px;"><strong>E-mail:</strong> ${userData.email}</p>
+              <p style="margin-bottom:8px;"><strong>Nova Senha:</strong> <span style="font-family:var(--font-heading);font-size:18px;color:var(--accent-orange);">${newPassword}</span></p>
+              <p style="margin-bottom:0;font-size:13px;color:var(--text-tertiary);">Palpites migrados: ${migratePromises.length}</p>
+            </div>
+            <small style="color:var(--accent-orange);display:block;margin-bottom:16px;">Envie o e-mail e a senha ao participante. A conta antiga ainda deve ser excluída no Firebase Console → Authentication.</small>
+            <div class="modal-actions">
+              <button class="btn btn-primary" id="btn-close-reset-result">Entendi</button>
+            </div>
+          </div>`;
+          document.body.appendChild(resultModal);
+          document.getElementById("btn-close-reset-result").addEventListener("click", () => resultModal.remove());
+
+          await addLog("SENHA REDEFINIDA", `${userData.nickname} (${userData.email}) - nova conta ${newUid}, ${migratePromises.length} palpite(s) migrado(s)`);
+          loadUsers();
+        } catch (e) {
+          showToast("Erro: " + e.message, "error");
+          btn.disabled = false;
+          btn.textContent = "Redefinir Senha";
+        }
+      });
     }
 
     async function loadAllGuesses() {
