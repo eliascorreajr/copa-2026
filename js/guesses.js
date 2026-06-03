@@ -1,17 +1,30 @@
 import { db } from "./auth.js";
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+import { parseScoreInput } from "./scoring.js";
 
-export async function saveGuess(userId, matchId, homeTeam, awayTeam, homeScore, awayScore) {
+export async function saveGuess(userId, matchId, homeTeam, awayTeam, homeScore, awayScore, dayKey, lockAt) {
+  const parsedHome = parseScoreInput(homeScore);
+  const parsedAway = parseScoreInput(awayScore);
+  if (parsedHome === null || parsedAway === null) {
+    throw new Error("Placar invalido.");
+  }
+  if (!dayKey || !lockAt) {
+    throw new Error("Dados de travamento ausentes.");
+  }
+
   const guessId = `${userId}_match_${matchId}`;
   await setDoc(doc(db, "guesses", guessId), {
     userId,
     matchId,
+    dayKey,
+    lockAt,
     homeTeam,
     awayTeam,
-    homeScore,
-    awayScore,
+    homeScore: parsedHome,
+    awayScore: parsedAway,
     locked: true,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   });
   return guessId;
 }

@@ -4,7 +4,35 @@ const SCORING = {
   wrongResult: -1
 };
 
+export function normalizeScore(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const score = Number(value);
+  if (!Number.isInteger(score) || score < 0 || score > 30) return null;
+  return score;
+}
+
+export function parseScoreInput(value) {
+  const raw = String(value ?? "").trim();
+  if (!/^\d+$/.test(raw)) return null;
+  return normalizeScore(raw);
+}
+
+export function hasCompleteScore(result) {
+  return !!result
+    && normalizeScore(result.homeScore) !== null
+    && normalizeScore(result.awayScore) !== null;
+}
+
 export function calculateScore(guessHome, guessAway, resultHome, resultAway) {
+  guessHome = normalizeScore(guessHome);
+  guessAway = normalizeScore(guessAway);
+  resultHome = normalizeScore(resultHome);
+  resultAway = normalizeScore(resultAway);
+
+  if (guessHome === null || guessAway === null || resultHome === null || resultAway === null) {
+    return { points: 0, type: "invalid" };
+  }
+
   if (guessHome === resultHome && guessAway === resultAway) {
     return { points: SCORING.exactScore, type: "exact" };
   }
@@ -26,10 +54,13 @@ export function calculateUserRanking(guesses, results) {
   let wrongCount = 0;
 
   for (const guess of guesses) {
-    const result = results[guess.matchId];
-    if (!result || result.homeScore === null || result.homeScore === undefined) continue;
+    const result = results[guess.matchId]
+      || results[String(guess.matchId)]
+      || results[`${guess.homeTeam}|${guess.awayTeam}`];
+    if (!hasCompleteScore(result)) continue;
 
     const score = calculateScore(guess.homeScore, guess.awayScore, result.homeScore, result.awayScore);
+    if (score.type === "invalid") continue;
     totalPoints += score.points;
 
     if (score.type === "exact") exactCount++;

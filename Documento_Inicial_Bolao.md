@@ -2,6 +2,14 @@
 
 Este documento apresenta a análise completa dos dados disponíveis, a arquitetura proposta e o planejamento das fases do projeto para o sistema de palpites do grupo **Quinta Categoria Show** na Copa do Mundo 2026.
 
+> **Nota de atualização (2026-06-03):** Este documento registra o plano inicial. A implementação atual está consolidada em `DOC_Projeto_Bolao.md`, `Guia_Configuracao_GitHub_Firebase.md` e `relatorio-simulacao-teste.md`.
+>
+> Diferenças importantes em relação ao plano original:
+> - Firebase Storage não é usado; fotos ficam como base64 comprimido no Firestore.
+> - Firestore Rules são mantidas em `firestore.rules` e publicadas via Firebase CLI.
+> - A trava de palpites é canônica por dia (`locks/{dayKey}`), reforçada nas Firestore Rules.
+> - Correções pós-simulação em 2026-06-03 adicionaram validação de perfil, proteção contra XSS armazenado e deploy real das rules para `bolao-copa-2026-cba87`.
+
 ---
 
 ## 1. Análise Completa dos Documentos

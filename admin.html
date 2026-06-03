@@ -49,6 +49,17 @@
       </div>
 
       <div class="admin-section">
+        <h3>Sincronizar Travas de Palpites</h3>
+        <div class="card">
+          <p style="color:var(--text-secondary);margin-bottom:16px;">
+            Cria ou atualiza os documentos <strong>locks</strong> usados pelas regras do Firestore para bloquear palpites por dia.
+          </p>
+          <button class="btn btn-secondary" id="btn-sync-locks">Sincronizar Travas</button>
+          <div id="locks-status" style="margin-top:12px;font-size:13px;color:var(--text-tertiary);"></div>
+        </div>
+      </div>
+
+      <div class="admin-section">
         <h3>Inserir / Corrigir Resultado Manualmente</h3>
         <div class="card">
           <div class="form-group">
@@ -173,12 +184,28 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, showToast, isAdmin } from "./js/auth.js?v=6";
+    import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=6";
     import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-    import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-    import { syncAllResults } from "./js/sofascore.js?v=6";
+    import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+    import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+    import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=6";
+    import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=6";
+    import { getDayKey, getDayLockInfo } from "./js/matches.js?v=6";
 
     let allMatchesData = null;
+
+    async function createAuthUserWithoutChangingAdminSession(email, password) {
+      const secondaryApp = initializeApp(app.options, `admin-secondary-${Date.now()}-${Math.random()}`);
+      try {
+        const secondaryAuth = getAuth(secondaryApp);
+        const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+        const createdUser = credential.user;
+        await signOut(secondaryAuth);
+        return createdUser;
+      } finally {
+        await deleteApp(secondaryApp);
+      }
+    }
 
     async function init() {
       const { user, profile } = await checkAuth("admin");
@@ -209,7 +236,64 @@
         allMatchesData = await response.json();
       } catch (e) {
         console.error("Erro ao carregar matches.json", e);
+        return;
       }
+
+      try {
+        const synced = await syncLockDocuments();
+        const statusEl = document.getElementById("locks-status");
+        if (statusEl) {
+          statusEl.textContent = `Travas sincronizadas automaticamente: ${synced} dia(s).`;
+          statusEl.style.color = "var(--success)";
+        }
+      } catch (e) {
+        console.warn("Erro ao sincronizar travas por dia:", e);
+        const statusEl = document.getElementById("locks-status");
+        if (statusEl) {
+          statusEl.textContent = "Erro ao sincronizar travas: " + e.message;
+          statusEl.style.color = "var(--accent-red)";
+        }
+      }
+    }
+
+    async function syncLockDocuments() {
+      if (!allMatchesData) return 0;
+      const days = new Map();
+      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
+      allMatches.forEach(match => {
+        const dayKey = getDayKey(match.date);
+        if (!days.has(dayKey)) days.set(dayKey, []);
+        days.get(dayKey).push(match);
+      });
+
+      const writes = [];
+      days.forEach((matches, dayKey) => {
+        const lockInfo = getDayLockInfo(allMatchesData, dayKey);
+        if (!lockInfo) return;
+        writes.push(setDoc(doc(db, "locks", dayKey), {
+          dayKey,
+          lockAt: lockInfo.lockAt,
+          firstMatchAt: lockInfo.firstMatchAt,
+          matchIds: lockInfo.matchIds,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }));
+      });
+      await Promise.all(writes);
+      return writes.length;
+    }
+
+    function getLockFieldsForMatch(matchId) {
+      if (!allMatchesData) return {};
+      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
+      const match = allMatches.find(m => m.id === Number(matchId));
+      if (!match) return {};
+      const dayKey = getDayKey(match.date);
+      const lockInfo = getDayLockInfo(allMatchesData, dayKey);
+      if (!lockInfo) return {};
+      return {
+        dayKey,
+        lockAt: lockInfo.lockAt
+      };
     }
 
     function populateMatchSelect() {
@@ -247,10 +331,10 @@
         results.forEach(r => {
           const source = r.manualEntry ? "Manual" : (r.sofaScoreId ? "SofaScore" : "Manual");
           html += `<tr>
-            <td>${r.homeTeam} x ${r.awayTeam}</td>
-            <td class="score-font">${r.homeScore} x ${r.awayScore}</td>
-            <td style="font-size:12px;color:var(--text-tertiary);">${source}</td>
-            <td><button class="btn btn-danger btn-sm" data-delete-match="${r.id}" style="padding:4px 10px;font-size:12px;">Excluir</button></td>
+            <td>${escapeHtml(r.homeTeam)} x ${escapeHtml(r.awayTeam)}</td>
+            <td class="score-font">${escapeHtml(r.homeScore)} x ${escapeHtml(r.awayScore)}</td>
+            <td style="font-size:12px;color:var(--text-tertiary);">${escapeHtml(source)}</td>
+            <td><button class="btn btn-danger btn-sm" data-delete-match="${escapeHtml(r.id)}" style="padding:4px 10px;font-size:12px;">Excluir</button></td>
           </tr>`;
         });
         html += '</tbody></table>';
@@ -267,7 +351,7 @@
           });
         });
       } catch (e) {
-        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar resultados: ${e.message}</p>`;
+        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar resultados: ${escapeHtml(e.message)}</p>`;
       }
     }
 
@@ -279,18 +363,20 @@
         snap.forEach(d => {
           const u = d.data();
           const isAdminUser = u.email === "admin@bolao.com";
+          const displayName = u.nickname || u.email || "Usuário";
+          const fullName = u.firstName ? `${u.firstName} ${u.lastName || ""}`.trim() : "";
           html += `<div class="admin-user-row" style="flex-wrap:wrap;gap:8px;">
             <div style="flex:1;min-width:200px;">
-              <strong>${u.nickname || u.email}</strong>
-              ${u.firstName ? `<span style="color:var(--text-tertiary);"> - ${u.firstName} ${u.lastName || ""}</span>` : ""}
+              <strong>${escapeHtml(displayName)}</strong>
+              ${fullName ? `<span style="color:var(--text-tertiary);"> - ${escapeHtml(fullName)}</span>` : ""}
               ${isAdminUser ? '<span style="color:var(--accent-orange);font-size:12px;margin-left:8px;">[ADMIN]</span>' : ""}
               ${u.email === "whiteglauber@bolao.com" ? '<span style="color:var(--accent-orange);font-size:12px;margin-left:8px;">[CONVIDADO]</span>' : ""}
             </div>
-            <div style="color:var(--text-tertiary);font-size:13px;">${u.email}</div>
+            <div style="color:var(--text-tertiary);font-size:13px;">${escapeHtml(u.email)}</div>
             <div style="display:flex;gap:6px;">
-              <button class="btn btn-secondary btn-sm" data-edit-user="${d.id}" style="padding:4px 10px;font-size:12px;">Editar</button>
-              <button class="btn btn-secondary btn-sm" data-reset-password="${d.id}" data-user-email="${u.email}" data-user-nickname="${u.nickname || u.email}" style="padding:4px 10px;font-size:12px;">Redefinir Senha</button>
-              ${!isAdminUser ? `<button class="btn btn-danger btn-sm" data-delete-user="${d.id}" data-user-email="${u.email}" style="padding:4px 10px;font-size:12px;">Remover</button>` : ""}
+              <button class="btn btn-secondary btn-sm" data-edit-user="${escapeHtml(d.id)}" style="padding:4px 10px;font-size:12px;">Editar</button>
+              <button class="btn btn-secondary btn-sm" data-reset-password="${escapeHtml(d.id)}" data-user-email="${escapeHtml(u.email)}" data-user-nickname="${escapeHtml(displayName)}" style="padding:4px 10px;font-size:12px;">Redefinir Senha</button>
+              ${!isAdminUser ? `<button class="btn btn-danger btn-sm" data-delete-user="${escapeHtml(d.id)}" data-user-email="${escapeHtml(u.email)}" style="padding:4px 10px;font-size:12px;">Remover</button>` : ""}
             </div>
           </div>`;
         });
@@ -354,7 +440,7 @@
           });
         });
       } catch (e) {
-        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar usuários: ${e.message}</p>`;
+        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar usuários: ${escapeHtml(e.message)}</p>`;
       }
     }
 
@@ -363,94 +449,39 @@
       modal.className = "modal-overlay";
       modal.style.display = "flex";
       modal.innerHTML = `<div class="modal-content">
-        <h3>Redefinir Senha de ${nickname}</h3>
-        <p style="color:var(--text-secondary);margin-bottom:16px;">Isso vai criar uma nova senha para o usuário <strong>${email}</strong>.</p>
-        <div class="form-group">
-          <label for="reset-new-password">Nova Senha</label>
-          <input type="text" id="reset-new-password" value="${Math.random().toString(36).slice(2, 10)}" style="font-family:var(--font-heading);font-size:18px;letter-spacing:1px;">
-          <small style="color:var(--text-tertiary);">Você pode editar a senha antes de confirmar. Mínimo 6 caracteres.</small>
-        </div>
-        <small style="color:var(--accent-orange);display:block;margin-bottom:16px;"><strong>Antes de confirmar:</strong> você precisa excluir a conta de autenticação atual deste usuário no Firebase Console → Authentication → Users. Caso contrário, a criação da nova conta vai falhar (e-mail já em uso).</small>
+        <h3>Redefinir Senha de ${escapeHtml(nickname)}</h3>
+        <p style="color:var(--text-secondary);margin-bottom:16px;">Isso vai enviar um e-mail de redefinição de senha para <strong>${escapeHtml(email)}</strong>.</p>
+        <small style="color:var(--text-tertiary);display:block;margin-bottom:16px;">A conta, o UID, o perfil e os palpites serão preservados.</small>
         <div class="modal-actions">
           <button class="btn btn-secondary" id="btn-cancel-reset">Cancelar</button>
-          <button class="btn btn-primary" id="btn-confirm-reset">Redefinir Senha</button>
+          <button class="btn btn-primary" id="btn-confirm-reset">Enviar E-mail</button>
         </div>
       </div>`;
       document.body.appendChild(modal);
 
       document.getElementById("btn-cancel-reset").addEventListener("click", () => modal.remove());
       document.getElementById("btn-confirm-reset").addEventListener("click", async () => {
-        const newPassword = document.getElementById("reset-new-password").value.trim();
-        if (newPassword.length < 6) {
-          showToast("A senha deve ter pelo menos 6 caracteres.", "warning");
-          return;
-        }
-
         const btn = document.getElementById("btn-confirm-reset");
         btn.disabled = true;
-        btn.textContent = "Criando...";
+        btn.textContent = "Enviando...";
 
         try {
           const userDoc = await getDoc(doc(db, "users", uid));
           if (!userDoc.exists()) {
             showToast("Usuário não encontrado no Firestore.", "error");
             btn.disabled = false;
-            btn.textContent = "Redefinir Senha";
+            btn.textContent = "Enviar E-mail";
             return;
           }
-          const userData = userDoc.data();
 
-          const newUserCredential = await createUserWithEmailAndPassword(auth, email, newPassword);
-          const newUid = newUserCredential.user.uid;
-
-          await setDoc(doc(db, "users", newUid), {
-            email: userData.email,
-            nickname: userData.nickname || userData.email,
-            firstName: userData.firstName || "",
-            lastName: userData.lastName || "",
-            displayName: userData.displayName || "",
-            photoURL: userData.photoURL || null,
-            firstAccess: false,
-            migratedFrom: uid,
-            createdAt: userData.createdAt || new Date().toISOString()
-          });
-
-          const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", uid)));
-          const migratePromises = [];
-          guessSnap.forEach(g => {
-            migratePromises.push(updateDoc(doc(db, "guesses", g.id), { userId: newUid }));
-          });
-          await Promise.all(migratePromises);
-
-          await deleteDoc(doc(db, "users", uid));
-
+          await sendPasswordResetEmail(auth, email);
           modal.remove();
-
-          const resultModal = document.createElement("div");
-          resultModal.className = "modal-overlay";
-          resultModal.style.display = "flex";
-          resultModal.innerHTML = `<div class="modal-content">
-            <h3>Senha Redefinida!</h3>
-            <div style="text-align:left;margin:16px 0;padding:16px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--bg-tertiary);">
-              <p style="margin-bottom:8px;"><strong>Usuário:</strong> ${userData.nickname || userData.email}</p>
-              <p style="margin-bottom:8px;"><strong>E-mail:</strong> ${userData.email}</p>
-              <p style="margin-bottom:8px;"><strong>Nova Senha:</strong> <span style="font-family:var(--font-heading);font-size:18px;color:var(--accent-orange);">${newPassword}</span></p>
-              <p style="margin-bottom:0;font-size:13px;color:var(--text-tertiary);">Palpites migrados: ${migratePromises.length}</p>
-            </div>
-            <small style="color:var(--accent-orange);display:block;margin-bottom:16px;">Envie o e-mail e a senha ao participante. A conta antiga ainda deve ser excluída no Firebase Console → Authentication.</small>
-            <div class="modal-actions">
-              <button class="btn btn-primary" id="btn-close-reset-result">Entendi</button>
-            </div>
-          </div>`;
-          document.body.appendChild(resultModal);
-          document.getElementById("btn-close-reset-result").addEventListener("click", () => resultModal.remove());
-
-          await addLog("SENHA REDEFINIDA", `${userData.nickname} (${userData.email}) - nova conta ${newUid}, ${migratePromises.length} palpite(s) migrado(s)`);
-          loadUsers();
+          showToast("E-mail de redefinição enviado!", "success");
+          await addLog("REDEFINIÇÃO DE SENHA", `E-mail enviado para ${email}`);
         } catch (e) {
           showToast("Erro: " + e.message, "error");
           btn.disabled = false;
-          btn.textContent = "Redefinir Senha";
+          btn.textContent = "Enviar E-mail";
         }
       });
     }
@@ -479,16 +510,16 @@
           const nickname = user ? (user.nickname || user.email) : g.userId.substring(0, 8);
           const date = g.createdAt ? new Date(g.createdAt).toLocaleString("pt-BR") : "-";
           html += `<tr>
-            <td>${nickname}</td>
-            <td>${g.homeTeam} x ${g.awayTeam}</td>
-            <td class="score-font">${g.homeScore} x ${g.awayScore}</td>
-            <td style="font-size:12px;color:var(--text-tertiary);">${date}</td>
+            <td>${escapeHtml(nickname)}</td>
+            <td>${escapeHtml(g.homeTeam)} x ${escapeHtml(g.awayTeam)}</td>
+            <td class="score-font">${escapeHtml(g.homeScore)} x ${escapeHtml(g.awayScore)}</td>
+            <td style="font-size:12px;color:var(--text-tertiary);">${escapeHtml(date)}</td>
           </tr>`;
         });
         html += '</tbody></table>';
         container.innerHTML = html;
       } catch (e) {
-        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar palpites: ${e.message}</p>`;
+        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar palpites: ${escapeHtml(e.message)}</p>`;
       }
     }
 
@@ -508,15 +539,15 @@
         logs.slice(0, 100).forEach(l => {
           const date = l.timestamp ? new Date(l.timestamp).toLocaleString("pt-BR") : "-";
           html += `<tr>
-            <td style="font-size:12px;white-space:nowrap;">${date}</td>
-            <td style="font-weight:600;color:var(--accent-orange);">${l.action || "-"}</td>
-            <td style="font-size:13px;">${l.details || "-"}</td>
+            <td style="font-size:12px;white-space:nowrap;">${escapeHtml(date)}</td>
+            <td style="font-weight:600;color:var(--accent-orange);">${escapeHtml(l.action || "-")}</td>
+            <td style="font-size:13px;">${escapeHtml(l.details || "-")}</td>
           </tr>`;
         });
         html += '</tbody></table>';
         container.innerHTML = html;
       } catch (e) {
-        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar logs: ${e.message}</p>`;
+        container.innerHTML = `<p style="color:var(--accent-red);">Erro ao carregar logs: ${escapeHtml(e.message)}</p>`;
       }
     }
 
@@ -557,6 +588,29 @@
       }
     });
 
+    document.getElementById("btn-sync-locks").addEventListener("click", async () => {
+      const statusEl = document.getElementById("locks-status");
+      const btn = document.getElementById("btn-sync-locks");
+      btn.disabled = true;
+      statusEl.textContent = "Sincronizando travas...";
+      statusEl.style.color = "var(--accent-orange)";
+
+      try {
+        const synced = await syncLockDocuments();
+        statusEl.textContent = `Travas sincronizadas: ${synced} dia(s).`;
+        statusEl.style.color = "var(--success)";
+        showToast(`${synced} trava(s) sincronizada(s)!`, "success");
+        await addLog("TRAVAS SINCRONIZADAS", `${synced} documento(s) locks atualizado(s)`);
+      } catch (e) {
+        statusEl.textContent = "Erro ao sincronizar travas: " + e.message;
+        statusEl.style.color = "var(--accent-red)";
+        showToast("Erro ao sincronizar travas", "error");
+        await addLog("ERRO TRAVAS", e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     // Manual result
     document.getElementById("manual-match").addEventListener("change", (e) => {
       const matchId = parseInt(e.target.value);
@@ -577,16 +631,22 @@
         showToast("Preencha todos os campos.", "warning");
         return;
       }
+      const parsedHome = parseScoreInput(homeScore);
+      const parsedAway = parseScoreInput(awayScore);
+      if (parsedHome === null || parsedAway === null) {
+        showToast("Use apenas placares inteiros entre 0 e 30.", "warning");
+        return;
+      }
       const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
       const match = allMatches.find(m => m.id === parseInt(matchId));
       if (!match) return;
       try {
         await setDoc(doc(db, "matches", `match_${matchId}`), {
-          matchId: matchId,
+          matchId: parseInt(matchId),
           homeTeam: match.homeTeam,
           awayTeam: match.awayTeam,
-          homeScore: parseInt(homeScore),
-          awayScore: parseInt(awayScore),
+          homeScore: parsedHome,
+          awayScore: parsedAway,
           status: "finished",
           manualEntry: true,
           updatedAt: new Date().toISOString()
@@ -619,8 +679,8 @@
         return;
       }
       try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, "users", userCredential.user.uid), {
+        const user = await createAuthUserWithoutChangingAdminSession(email, password);
+        await setDoc(doc(db, "users", user.uid), {
           email, nickname,
           firstName: "", lastName: "",
           photoURL: null, firstAccess: true,
@@ -649,22 +709,22 @@
         const userMap = {};
         userSnap.forEach(d => { userMap[d.id] = d.data(); });
 
-        const matchesMap = {};
-        matchSnap.forEach(d => {
-          const data = d.data();
-          matchesMap[data.matchId || d.id.replace("match_", "").replace("sofa_", "")] = data;
-        });
+        const matchesMap = buildResultLookup(matchSnap);
 
         let csv = "Usuário,E-mail,Jogo,Mandante,Visitante,Palpite Mandante,Palpite Visitante,Resultado Oficial Mandante,Resultado Oficial Visitante,Pontos,Tipo,Data do Palpite\n";
 
-        const SCORING = { exactScore: 7, correctResult: 3, wrongResult: -1 };
+        function csvValue(value) {
+          const raw = String(value ?? "");
+          const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+          return `"${safe.replace(/"/g, '""')}"`;
+        }
 
         guessSnap.forEach(d => {
           const g = d.data();
           const user = userMap[g.userId];
           const nickname = user ? (user.nickname || user.email) : g.userId.substring(0, 8);
           const email = user ? user.email : "";
-          const result = matchesMap[g.matchId] || matchesMap[String(g.matchId)];
+          const result = matchesMap[g.matchId] || matchesMap[String(g.matchId)] || matchesMap[`${g.homeTeam}|${g.awayTeam}`];
           const date = g.createdAt ? new Date(g.createdAt).toLocaleString("pt-BR") : "-";
 
           let resultHome = "";
@@ -672,26 +732,34 @@
           let points = "";
           let type = "Sem resultado";
 
-          if (result && result.homeScore !== null && result.homeScore !== undefined) {
+          if (hasCompleteScore(result)) {
             resultHome = result.homeScore;
             resultAway = result.awayScore;
-            if (g.homeScore === result.homeScore && g.awayScore === result.awayScore) {
-              points = SCORING.exactScore;
-              type = "Placar Exato";
-            } else if (
-              (g.homeScore > g.awayScore && result.homeScore > result.awayScore) ||
-              (g.homeScore < g.awayScore && result.homeScore < result.awayScore) ||
-              (g.homeScore === g.awayScore && result.homeScore === result.awayScore)
-            ) {
-              points = SCORING.correctResult;
-              type = "Resultado Correto";
-            } else {
-              points = SCORING.wrongResult;
-              type = "Resultado Errado";
+            const score = calculateScore(g.homeScore, g.awayScore, result.homeScore, result.awayScore);
+            if (score.type !== "invalid") {
+              points = score.points;
+              type = score.type === "exact"
+                ? "Placar Exato"
+                : score.type === "correct"
+                  ? "Resultado Correto"
+                  : "Resultado Errado";
             }
           }
 
-          csv += `"${nickname}","${email}","${g.homeTeam} x ${g.awayTeam}","${g.homeTeam}","${g.awayTeam}",${g.homeScore},${g.awayScore},${resultHome},${resultAway},${points},"${type}","${date}"\n`;
+          csv += [
+            csvValue(nickname),
+            csvValue(email),
+            csvValue(`${g.homeTeam} x ${g.awayTeam}`),
+            csvValue(g.homeTeam),
+            csvValue(g.awayTeam),
+            g.homeScore,
+            g.awayScore,
+            resultHome,
+            resultAway,
+            points,
+            csvValue(type),
+            csvValue(date)
+          ].join(",") + "\n";
         });
 
         const BOM = "\uFEFF";
@@ -741,8 +809,8 @@
           btn.textContent = "Migrando...";
 
 const tempPassword = Math.random().toString(36).slice(2, 10);
-          const newUserCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
-          const newUid = newUserCredential.user.uid;
+          const newUser = await createAuthUserWithoutChangingAdminSession(email, tempPassword);
+          const newUid = newUser.uid;
 
           const oldUserDoc = await getDoc(doc(db, "users", uid));
           const oldData = oldUserDoc.exists() ? oldUserDoc.data() : {};
@@ -762,8 +830,15 @@ const tempPassword = Math.random().toString(36).slice(2, 10);
           const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", uid)));
           const migratePromises = [];
           guessSnap.forEach(g => {
+            const guessData = g.data();
+            const newGuessId = `${newUid}_match_${guessData.matchId}`;
             migratePromises.push(
-              updateDoc(doc(db, "guesses", g.id), { userId: newUid })
+              setDoc(doc(db, "guesses", newGuessId), {
+                ...guessData,
+                ...getLockFieldsForMatch(guessData.matchId),
+                userId: newUid
+              }, { merge: true })
+                .then(() => deleteDoc(doc(db, "guesses", g.id)))
             );
           });
           await Promise.all(migratePromises);
@@ -782,12 +857,12 @@ const tempPassword = Math.random().toString(36).slice(2, 10);
           migrationModal.innerHTML = `<div class="modal-content">
             <h3>Usuário Migrado com Sucesso!</h3>
             <div style="text-align:left;margin:16px 0;padding:16px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--bg-tertiary);">
-              <p style="margin-bottom:8px;"><strong>Apelido:</strong> ${nickname}</p>
-              <p style="margin-bottom:8px;"><strong>Novo e-mail:</strong> ${email}</p>
-              <p style="margin-bottom:8px;"><strong>Senha temporária:</strong> <span style="font-family:var(--font-heading);font-size:18px;color:var(--accent-orange);">${tempPassword}</span></p>
+              <p style="margin-bottom:8px;"><strong>Apelido:</strong> ${escapeHtml(nickname)}</p>
+              <p style="margin-bottom:8px;"><strong>Novo e-mail:</strong> ${escapeHtml(email)}</p>
+              <p style="margin-bottom:8px;"><strong>Senha temporária:</strong> <span style="font-family:var(--font-heading);font-size:18px;color:var(--accent-orange);">${escapeHtml(tempPassword)}</span></p>
               <p style="margin-bottom:0;font-size:13px;color:var(--text-tertiary);">Palpites migrados: ${migratePromises.length}</p>
             </div>
-            <small style="color:var(--accent-orange);display:block;margin-bottom:16px;">Anote a senha temporária e envie ao participante. Ele deve fazer login com o novo e-mail e trocar a senha no Perfil. A conta antiga (${originalEmail}) deve ser excluída no Firebase Console → Authentication.</small>
+            <small style="color:var(--accent-orange);display:block;margin-bottom:16px;">Anote a senha temporária e envie ao participante. Ele deve fazer login com o novo e-mail e trocar a senha no Perfil. A conta antiga (${escapeHtml(originalEmail)}) deve ser excluída no Firebase Console → Authentication.</small>
             <div class="modal-actions">
               <button class="btn btn-primary" id="btn-close-migration">Entendi</button>
             </div>

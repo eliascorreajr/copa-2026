@@ -53,7 +53,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, getUserProfile, fileToBase64, compressPhoto } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, getUserProfile, fileToBase64, compressPhoto, safeImageSrc } from "./js/auth.js?v=6";
     import { doc, setDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { updatePassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
@@ -72,13 +72,14 @@
         "admin@bolao.com": "AdminSuper"
       };
 
-      document.getElementById("nickname").value = nicknameMap[user.email] || user.email;
+      document.getElementById("nickname").value = profile?.nickname || nicknameMap[user.email] || user.email;
 
       if (profile && profile.firstName) {
         document.getElementById("firstName").value = profile.firstName || "";
         document.getElementById("lastName").value = profile.lastName || "";
-        if (profile.photoURL) {
-          document.getElementById("photo-preview").outerHTML = `<img id="photo-preview" src="${profile.photoURL}" class="profile-avatar" style="width:120px;height:120px;border-radius:50%;border:3px solid var(--accent-orange);object-fit:cover;margin:12px auto;">`;
+        const existingPhotoURL = safeImageSrc(profile.photoURL);
+        if (existingPhotoURL) {
+          document.getElementById("photo-preview").outerHTML = `<img id="photo-preview" src="${existingPhotoURL}" class="profile-avatar" style="width:120px;height:120px;border-radius:50%;border:3px solid var(--accent-orange);object-fit:cover;margin:12px auto;">`;
         }
       }
     }
@@ -138,12 +139,14 @@
 
       try {
         const user = auth.currentUser;
-        let photoURL = currentUserProfile?.photoURL || null;
+        let photoURL = safeImageSrc(currentUserProfile?.photoURL) || null;
 
         if (selectedFile) {
           const base64 = await fileToBase64(selectedFile);
           photoURL = await compressPhoto(base64, 200);
         }
+
+        await updatePassword(user, newPassword);
 
         await setDoc(doc(db, "users", user.uid), {
           email: user.email,
@@ -153,10 +156,8 @@
           displayName: `${document.getElementById("nickname").value} - vulgo ${firstName} ${lastName}`,
           photoURL: photoURL,
           firstAccess: false,
-          createdAt: new Date().toISOString()
+          createdAt: currentUserProfile?.createdAt || new Date().toISOString()
         }, { merge: true });
-
-        await updatePassword(user, newPassword);
 
         if (user.email === "admin@bolao.com") {
           window.location.href = "admin.html";
@@ -164,7 +165,9 @@
           window.location.href = "index.html";
         }
       } catch (error) {
-        errorDiv.textContent = "Erro ao salvar: " + error.message;
+        errorDiv.textContent = error.code === "auth/requires-recent-login"
+          ? "Faça login novamente antes de trocar a senha."
+          : "Erro ao salvar: " + error.message;
         errorDiv.style.display = "block";
       } finally {
         btn.disabled = false;

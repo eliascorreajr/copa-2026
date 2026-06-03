@@ -64,7 +64,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, showToast, fileToBase64, compressPhoto } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, setupNavbar, showToast, fileToBase64, compressPhoto, safeImageSrc } from "./js/auth.js?v=6";
     import { updateDoc, doc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { updatePassword } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
@@ -89,8 +89,9 @@
       fullnameEl.textContent = currentProfile.firstName ? `${currentProfile.firstName} ${currentProfile.lastName || ""}` : "";
       emailEl.textContent = currentUser.email;
 
-      if (currentProfile.photoURL) {
-        avatarEl.outerHTML = `<img id="profile-avatar" src="${currentProfile.photoURL}" class="profile-avatar" alt="Foto de perfil">`;
+      const photoURL = safeImageSrc(currentProfile.photoURL);
+      if (photoURL) {
+        avatarEl.outerHTML = `<img id="profile-avatar" src="${photoURL}" class="profile-avatar" alt="Foto de perfil">`;
       }
     }
 
@@ -148,7 +149,9 @@
           document.getElementById("newPassword").value = "";
           document.getElementById("confirmPassword").value = "";
         } catch (err) {
-          msg.textContent = "Erro ao atualizar senha: " + err.message;
+          msg.textContent = err.code === "auth/requires-recent-login"
+            ? "Faça login novamente antes de alterar a senha."
+            : "Erro ao atualizar senha: " + err.message;
           msg.style.color = "var(--accent-red)";
         }
       }

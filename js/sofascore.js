@@ -1,3 +1,5 @@
+import { normalizeScore } from "./scoring.js";
+
 const SOFASCORE_BASE_URL = "https://api.sofascore.com/api/v1/unique-tournament/16/season/58210";
 const SEASON_ID = 58210;
 
@@ -45,8 +47,8 @@ function buildMatchLookup(matchesData) {
   ];
   for (const m of allMatches) {
     if (m.homeTeam && m.awayTeam && m.homeTeam !== "TBD" && m.awayTeam !== "TBD") {
-      const key = `${m.homeTeam}|${m.awayTeam}`;
-      lookup[key] = m;
+      lookup[`${m.homeTeam}|${m.awayTeam}`] = { match: m, reversed: false };
+      lookup[`${m.awayTeam}|${m.homeTeam}`] = { match: m, reversed: true };
     }
   }
   return lookup;
@@ -75,24 +77,32 @@ export async function syncAllResults(db, matchesData) {
       for (const event of events) {
         const status = event.status?.code || 0;
         if (status >= 100) {
-          const homeScore = event.homeScore?.current;
-          const awayScore = event.awayScore?.current;
+          const homeScore = normalizeScore(event.homeScore?.current);
+          const awayScore = normalizeScore(event.awayScore?.current);
 
-          if (homeScore !== null && homeScore !== undefined && awayScore !== null && awayScore !== undefined) {
-            const homeTeam = translateName(event.homeTeam.name);
-            const awayTeam = translateName(event.awayTeam.name);
+          if (homeScore !== null && awayScore !== null) {
+            const apiHomeTeam = translateName(event.homeTeam.name);
+            const apiAwayTeam = translateName(event.awayTeam.name);
             const stageInfo = ROUNDS_MAP[round] || {};
 
-            const matchKey = `${homeTeam}|${awayTeam}`;
-            const matchedMatch = matchLookup[matchKey];
+            const matchKey = `${apiHomeTeam}|${apiAwayTeam}`;
+            const matched = matchLookup[matchKey];
 
-            let docId, matchId;
-            if (matchedMatch) {
-              docId = `match_${matchedMatch.id}`;
-              matchId = matchedMatch.id;
+            let docId, matchId, homeTeam, awayTeam, localHomeScore, localAwayScore;
+            if (matched) {
+              docId = `match_${matched.match.id}`;
+              matchId = matched.match.id;
+              homeTeam = matched.match.homeTeam;
+              awayTeam = matched.match.awayTeam;
+              localHomeScore = matched.reversed ? awayScore : homeScore;
+              localAwayScore = matched.reversed ? homeScore : awayScore;
             } else {
               docId = `sofa_${event.id}`;
               matchId = null;
+              homeTeam = apiHomeTeam;
+              awayTeam = apiAwayTeam;
+              localHomeScore = homeScore;
+              localAwayScore = awayScore;
             }
 
             await setDoc(doc(db, "matches", docId), {
@@ -104,8 +114,8 @@ export async function syncAllResults(db, matchesData) {
               awayTeamOriginal: event.awayTeam.name,
               homeTeamCode: event.homeTeam.nameCode,
               awayTeamCode: event.awayTeam.nameCode,
-              homeScore,
-              awayScore,
+              homeScore: localHomeScore,
+              awayScore: localAwayScore,
               status: "finished",
               round: round,
               stage: stageInfo.stage || "unknown",

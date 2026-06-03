@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == "admin@bolao.com";
+    }
+
+    function guessOwnerId(guessId) {
+      return guessId.split('_match_')[0];
+    }
+
+    function isGuessOwner(guessId) {
+      return signedIn() && request.auth.uid == guessOwnerId(guessId);
+    }
+
+    function validScore(score) {
+      return score is int && score >= 0 && score <= 30;
+    }
+
+    function validOptionalString(value, maxLength) {
+      return value == null || (value is string && value.size() <= maxLength);
+    }
+
+    function validRequiredString(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    function validOptionalPhoto(value) {
+      return value == null
+        || (value is string
+          && value.size() <= 120000
+          && value.matches('^data:image/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$'));
+    }
+
+    function validSelfUserWrite(userId) {
+      return signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          "email", "nickname", "firstName", "lastName",
+          "displayName", "photoURL", "firstAccess", "createdAt", "migratedFrom"
+        ])
+        && request.resource.data.email == request.auth.token.email
+        && validRequiredString(request.resource.data.nickname, 80)
+        && validOptionalString(request.resource.data.firstName, 80)
+        && validOptionalString(request.resource.data.lastName, 120)
+        && validOptionalString(request.resource.data.displayName, 220)
+        && validOptionalPhoto(request.resource.data.photoURL)
+        && request.resource.data.firstAccess is bool
+        && validOptionalString(request.resource.data.createdAt, 64)
+        && validOptionalString(request.resource.data.migratedFrom, 128);
+    }
+
+    function lockPath(dayKey) {
+      return /databases/$(database)/documents/locks/$(dayKey);
+    }
+
+    function hasCanonicalLock(data) {
+      return data.dayKey is string
+        && data.lockAt is timestamp
+        && exists(lockPath(data.dayKey))
+        && data.lockAt == get(lockPath(data.dayKey)).data.lockAt;
+    }
+
+    function beforeCanonicalLock(data) {
+      return hasCanonicalLock(data)
+        && request.time < get(lockPath(data.dayKey)).data.lockAt;
+    }
+
+    function validGuessWrite(guessId) {
+      return request.resource.data.keys().hasOnly([
+          "userId", "matchId", "dayKey", "lockAt", "homeTeam", "awayTeam",
+          "homeScore", "awayScore", "locked", "createdAt", "updatedAt"
+        ])
+        && request.resource.data.userId == guessOwnerId(guessId)
+        && request.resource.data.matchId is int
+        && request.resource.data.homeTeam is string
+        && request.resource.data.awayTeam is string
+        && validScore(request.resource.data.homeScore)
+        && validScore(request.resource.data.awayScore)
+        && request.resource.data.locked == true
+        && hasCanonicalLock(request.resource.data);
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() || validSelfUserWrite(userId);
+      allow delete: if isAdmin();
+    }
+
+    match /guesses/{guessId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        || (isGuessOwner(guessId) && validGuessWrite(guessId) && beforeCanonicalLock(request.resource.data));
+      allow delete: if isAdmin()
+        || (isGuessOwner(guessId) && beforeCanonicalLock(resource.data));
+    }
+
+    match /matches/{matchId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /locks/{dayKey} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /config/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}

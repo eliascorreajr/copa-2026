@@ -55,6 +55,24 @@ export async function getUserProfile(uid) {
   return userDoc.exists() ? userDoc.data() : null;
 }
 
+export function needsFirstAccess(profile) {
+  return !profile || profile.firstAccess === true || !profile.firstName || !profile.lastName;
+}
+
+export function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function safeImageSrc(value) {
+  const src = String(value ?? "");
+  return /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(src) ? src : "";
+}
+
 export function checkAuth(requiredRole) {
   return new Promise((resolve) => {
     onAuthStateChanged(auth, async (user) => {
@@ -69,8 +87,16 @@ window.location.href = "login.html";
       }
 
       const profile = await getUserProfile(user.uid);
-      if (!profile && !window.location.pathname.includes("primeiro-acesso")) {
+      const onFirstAccessPage = window.location.pathname.includes("primeiro-acesso");
+      const mustCompleteProfile = needsFirstAccess(profile);
+
+      if (mustCompleteProfile && !onFirstAccessPage) {
         window.location.href = "primeiro-acesso.html";
+        return;
+      }
+
+      if (!mustCompleteProfile && onFirstAccessPage) {
+        window.location.href = isAdmin(user) ? "admin.html" : "index.html";
         return;
       }
 
@@ -83,15 +109,18 @@ export function setupNavbar(profile) {
   const navbarUser = document.getElementById("navbar-user");
   if (!navbarUser) return;
 
-  if (profile.photoURL) {
+  const nickname = escapeHtml(profile?.nickname || auth.currentUser?.email || "Usuário");
+  const photoURL = safeImageSrc(profile?.photoURL);
+
+  if (photoURL) {
     navbarUser.innerHTML = `
-      <img src="${profile.photoURL}" alt="${profile.nickname}">
-      <span>${profile.nickname}</span>
+      <img src="${photoURL}" alt="${nickname}">
+      <span>${nickname}</span>
     `;
   } else {
     navbarUser.innerHTML = `
       <div class="user-placeholder">👤</div>
-      <span>${profile.nickname}</span>
+      <span>${nickname}</span>
     `;
   }
 

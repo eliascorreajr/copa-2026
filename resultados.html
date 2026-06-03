@@ -42,7 +42,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, setupNavbar, escapeHtml } from "./js/auth.js?v=6";
     import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { buildResultLookup } from "./js/sofascore.js?v=6";
 
@@ -138,18 +138,18 @@
 
         html += `<div class="card match-card animate-fade-in${hasResult ? ' match-finished' : ''}">
           <div class="match-header">
-            <span class="match-group-badge">${isGroup ? `Grupo ${m.group}` : stageLabel(m.stage)}</span>
-            <span style="color:var(--text-tertiary);font-size:12px;">${formatDate(m.date)}</span>
+            <span class="match-group-badge">${escapeHtml(isGroup ? `Grupo ${m.group}` : stageLabel(m.stage))}</span>
+            <span style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(formatDate(m.date))}</span>
           </div>
           <div class="match-teams">
             <div style="flex:1;text-align:center;">
-              <div class="team-name">${m.homeTeam}</div>
+              <div class="team-name">${escapeHtml(m.homeTeam)}</div>
             </div>
             ${hasResult ? `
               <div class="score-official">
-                <span>${result.homeScore}</span>
+                <span>${escapeHtml(result.homeScore)}</span>
                 <span class="dash">x</span>
-                <span>${result.awayScore}</span>
+                <span>${escapeHtml(result.awayScore)}</span>
               </div>
             ` : `
               <div class="score-official" style="color:var(--text-tertiary);">
@@ -159,7 +159,7 @@
               </div>
             `}
             <div style="flex:1;text-align:center;">
-              <div class="team-name">${m.awayTeam}</div>
+              <div class="team-name">${escapeHtml(m.awayTeam)}</div>
             </div>
           </div>
           ${hasResult ? '' : '<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-tertiary);">Aguardando resultado</div>'}

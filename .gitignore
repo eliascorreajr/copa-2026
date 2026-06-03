@@ -9,6 +9,9 @@ https___www.sofascore.com*
 sdk-firebase-npm-e-script.txt
 usuarios-firebase.txt
 firestore-rules.txt
+prompt-simulacao-teste.md
+relatorio-simulacao-teste.md
+comandos-publicar.txt
 .DS_Store
 *.xlsx
 extract_matches.py

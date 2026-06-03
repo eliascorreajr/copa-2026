@@ -53,15 +53,16 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, showToast, formatDate } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, setupNavbar, showToast, formatDate, escapeHtml } from "./js/auth.js?v=6";
     import { getDoc, doc, setDoc, deleteDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+    import { parseScoreInput } from "./js/scoring.js?v=6";
+    import { getDayKey, getMatchesByDay, isDayLocked, getDayLockInfo, getDayLockCountdown } from "./js/matches.js?v=6";
 
     let currentUser = null;
     let currentProfile = null;
     let matchesData = [];
     let userGuesses = {};
     let currentDay = null;
-    const LOCK_MINUTES = 30;
 
     async function init() {
       const { user, profile } = await checkAuth();
@@ -88,11 +89,6 @@
       }
     }
 
-    function getDayKey(dateStr) {
-      const d = new Date(dateStr);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }
-
     function formatDayLabel(dayKey) {
       const [y, m, d] = dayKey.split('-');
       const date = new Date(y, m - 1, d);
@@ -117,29 +113,13 @@
     }
 
     function getMatchesForDay(dayKey) {
-      const allMatches = [...matchesData.groupMatches, ...matchesData.knockoutMatches];
-      return allMatches.filter(m => getDayKey(m.date) === dayKey);
-    }
-
-    function isDayLocked(dayKey) {
-      const matches = getMatchesForDay(dayKey);
-      if (matches.length === 0) return true;
-      const earliestDate = Math.min(...matches.map(m => new Date(m.date).getTime()));
-      const lockTime = earliestDate - LOCK_MINUTES * 60 * 1000;
-      return Date.now() >= lockTime;
+      return getMatchesByDay(matchesData, dayKey);
     }
 
     function getLockCountdown(dayKey) {
-      const matches = getMatchesForDay(dayKey);
-      if (matches.length === 0) return null;
-      const earliestDate = Math.min(...matches.map(m => new Date(m.date).getTime()));
-      const lockTime = earliestDate - LOCK_MINUTES * 60 * 1000;
-      const diff = lockTime - Date.now();
-      if (diff <= 0) return null;
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diff % (1000 * 60)) / 1000);
+      const countdown = getDayLockCountdown(matchesData, dayKey);
+      if (!countdown) return null;
+      const { days, hours, mins, secs } = countdown;
       let str = '';
       if (days > 0) str += `${days}d `;
       str += `${hours}h ${mins}m ${secs}s`;
@@ -155,7 +135,7 @@
       const now = Date.now();
 
       days.forEach((day, i) => {
-        const locked = isDayLocked(day.value);
+        const locked = isDayLocked(matchesData, day.value);
         const btn = document.createElement("button");
         btn.textContent = day.label;
         btn.dataset.day = day.value;
@@ -205,7 +185,7 @@
       }
 
       const matches = getMatchesForDay(currentDay);
-      const locked = isDayLocked(currentDay);
+      const locked = isDayLocked(matchesData, currentDay);
       const countdown = getLockCountdown(currentDay);
       let html = "";
 
@@ -231,21 +211,21 @@
 
         html += `<div class="card match-card ${locked ? 'match-locked' : ''} ${existing ? 'match-has-guess' : ''} animate-fade-in">
           <div class="match-header">
-            <span class="match-group-badge">${groupLabel} ${roundLabel}</span>
-            <span style="color:var(--text-tertiary);font-size:12px;">${formatDate(m.date)}</span>
+            <span class="match-group-badge">${escapeHtml(`${groupLabel} ${roundLabel}`.trim())}</span>
+            <span style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(formatDate(m.date))}</span>
             ${existing && !locked ? '<span style="color:var(--success);font-size:11px;font-weight:600;">✓ Salvo</span>' : ''}
           </div>
           <div class="match-teams">
             <div style="flex:1;text-align:center;">
-              <div class="team-name">${m.homeTeam}</div>
+              <div class="team-name">${escapeHtml(m.homeTeam)}</div>
             </div>
             <div class="score-input" data-match-id="${m.id}">
-              <input type="number" min="0" max="30" value="${homeVal}" placeholder="-" ${locked ? 'disabled' : ''} class="home-score" data-match="${m.id}">
+              <input type="number" min="0" max="30" value="${escapeHtml(homeVal)}" placeholder="-" ${locked ? 'disabled' : ''} class="home-score" data-match="${m.id}">
               <span class="vs">x</span>
-              <input type="number" min="0" max="30" value="${awayVal}" placeholder="-" ${locked ? 'disabled' : ''} class="away-score" data-match="${m.id}">
+              <input type="number" min="0" max="30" value="${escapeHtml(awayVal)}" placeholder="-" ${locked ? 'disabled' : ''} class="away-score" data-match="${m.id}">
             </div>
             <div style="flex:1;text-align:center;">
-              <div class="team-name">${m.awayTeam}</div>
+              <div class="team-name">${escapeHtml(m.awayTeam)}</div>
             </div>
           </div>
         </div>`;
@@ -269,9 +249,22 @@
     }
 
     async function handleSaveAll() {
+      if (isDayLocked(matchesData, currentDay)) {
+        showToast("Palpites travados para este dia.", "warning");
+        renderMatches();
+        return;
+      }
+
+      const lockInfo = getDayLockInfo(matchesData, currentDay);
+      if (!lockInfo) {
+        showToast("Dia inválido para palpites.", "error");
+        return;
+      }
+
       const matches = getMatchesForDay(currentDay);
       const guesses = [];
       let hasEmpty = false;
+      let hasInvalid = false;
 
       matches.forEach(m => {
         const homeInput = document.querySelector(`.home-score[data-match="${m.id}"]`);
@@ -282,13 +275,23 @@
           if (homeScore === "" || awayScore === "") {
             hasEmpty = true;
           } else {
-            guesses.push({ matchId: m.id, homeScore: parseInt(homeScore), awayScore: parseInt(awayScore), homeTeam: m.homeTeam, awayTeam: m.awayTeam });
+            const parsedHome = parseScoreInput(homeScore);
+            const parsedAway = parseScoreInput(awayScore);
+            if (parsedHome === null || parsedAway === null) {
+              hasInvalid = true;
+            } else {
+              guesses.push({ matchId: m.id, homeScore: parsedHome, awayScore: parsedAway, homeTeam: m.homeTeam, awayTeam: m.awayTeam });
+            }
           }
         }
       });
 
       if (hasEmpty) {
         showToast("Preencha todos os placares antes de salvar.", "warning");
+        return;
+      }
+      if (hasInvalid) {
+        showToast("Use apenas placares inteiros entre 0 e 30.", "warning");
         return;
       }
       if (guesses.length === 0) {
@@ -304,10 +307,17 @@
       document.getElementById("btn-confirm-guess").onclick = async () => {
         modal.style.display = "none";
         try {
+          if (isDayLocked(matchesData, currentDay)) {
+            showToast("Palpites travados para este dia.", "warning");
+            renderMatches();
+            return;
+          }
           for (const g of guesses) {
             await setDoc(doc(db, "guesses", `${currentUser.uid}_match_${g.matchId}`), {
               userId: currentUser.uid,
               matchId: g.matchId,
+              dayKey: lockInfo.dayKey,
+              lockAt: lockInfo.lockAt,
               homeTeam: g.homeTeam,
               awayTeam: g.awayTeam,
               homeScore: g.homeScore,
@@ -329,6 +339,12 @@
     }
 
     async function handleClearGuesses() {
+      if (isDayLocked(matchesData, currentDay)) {
+        showToast("Palpites travados para este dia.", "warning");
+        renderMatches();
+        return;
+      }
+
       const matches = getMatchesForDay(currentDay);
       const modal = document.getElementById("confirm-modal");
       const textEl = document.getElementById("confirm-modal-text");

@@ -1,6 +1,7 @@
 import { db } from "./auth.js";
 import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-import { calculateUserRanking, SCORING } from "./scoring.js";
+import { calculateUserRanking } from "./scoring.js";
+import { buildResultLookup } from "./sofascore.js";
 
 export async function getRanking() {
   const usersSnap = await getDocs(collection(db, "users"));
@@ -16,11 +17,7 @@ export async function getRanking() {
   guessesSnap.forEach(d => allGuesses.push(d.data()));
 
   const matchesSnap = await getDocs(collection(db, "matches"));
-  const results = {};
-  matchesSnap.forEach(d => {
-    const data = d.data();
-    results[data.matchId || d.id] = data;
-  });
+  const results = buildResultLookup(matchesSnap);
 
   const ranking = users.map(user => {
     const userGuesses = allGuesses.filter(g => g.userId === user.uid);

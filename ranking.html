@@ -40,11 +40,10 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, setupNavbar, escapeHtml, safeImageSrc } from "./js/auth.js?v=6";
     import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { buildResultLookup } from "./js/sofascore.js?v=6";
-
-    const SCORING = { exactScore: 7, correctResult: 3, wrongResult: -1 };
+    import { calculateScore, hasCompleteScore } from "./js/scoring.js?v=6";
 
     async function init() {
       const { user, profile } = await checkAuth();
@@ -78,27 +77,15 @@
             const guess = g.data();
             if (guess.userId !== uid) return;
             const result = results[guess.matchId] || results[String(guess.matchId)] || results[`${guess.homeTeam}|${guess.awayTeam}`];
-            if (!result || result.homeScore === null || result.homeScore === undefined) return;
+            if (!hasCompleteScore(result)) return;
 
-            const guessHome = guess.homeScore;
-            const guessAway = guess.awayScore;
-            const resultHome = result.homeScore;
-            const resultAway = result.awayScore;
+            const score = calculateScore(guess.homeScore, guess.awayScore, result.homeScore, result.awayScore);
+            if (score.type === "invalid") return;
 
-            if (guessHome === resultHome && guessAway === resultAway) {
-              totalPoints += SCORING.exactScore;
-              exactCount++;
-            } else if (
-              (guessHome > guessAway && resultHome > resultAway) ||
-              (guessHome < guessAway && resultHome < resultAway) ||
-              (guessHome === guessAway && resultHome === resultAway)
-            ) {
-              totalPoints += SCORING.correctResult;
-              correctCount++;
-            } else {
-              totalPoints += SCORING.wrongResult;
-              wrongCount++;
-            }
+            totalPoints += score.points;
+            if (score.type === "exact") exactCount++;
+            else if (score.type === "correct") correctCount++;
+            else wrongCount++;
           });
 
           return {
@@ -136,13 +123,16 @@
           else if (pos === 2) { posClass = "silver"; rowClass = "ranking-row-silver"; trophy = "🥈"; }
           else if (pos === 3) { posClass = "bronze"; rowClass = "ranking-row-bronze"; trophy = "🥉"; }
 
-          const avatar = r.photoURL
-            ? `<img src="${r.photoURL}" alt="${r.nickname}">`
-            : `<div class="placeholder-avatar">${(r.firstName || r.nickname || "?")[0].toUpperCase()}</div>`;
+          const displayName = r.nickname || r.email || "Participante";
+          const fullName = r.firstName ? `${r.firstName} ${(r.lastName || "")}`.trim() : "";
+          const photoURL = safeImageSrc(r.photoURL);
+          const avatar = photoURL
+            ? `<img src="${photoURL}" alt="${escapeHtml(displayName)}">`
+            : `<div class="placeholder-avatar">${escapeHtml((r.firstName || displayName || "?")[0].toUpperCase())}</div>`;
 
           html += `<tr class="${rowClass}">
             <td class="ranking-position ${posClass}">${trophy || pos}</td>
-            <td><div class="ranking-user">${avatar}<div><div class="ranking-nickname">${r.nickname || r.email}</div><div class="ranking-fullname">${r.firstName ? r.firstName + " " + (r.lastName || "") : ""}</div></div></div></td>
+            <td><div class="ranking-user">${avatar}<div><div class="ranking-nickname">${escapeHtml(displayName)}</div><div class="ranking-fullname">${escapeHtml(fullName)}</div></div></div></td>
             <td style="text-align:center;font-size:13px;">${r.exactCount}</td>
             <td style="text-align:center;font-size:13px;">${r.correctCount}</td>
             <td style="text-align:center;font-size:13px;">${r.wrongCount}</td>
@@ -154,7 +144,7 @@
         container.innerHTML = html;
 
       } catch (e) {
-        container.innerHTML = `<p style="text-align:center;color:var(--accent-red);">Erro ao carregar ranking: ${e.message}</p>`;
+        container.innerHTML = `<p style="text-align:center;color:var(--accent-red);">Erro ao carregar ranking: ${escapeHtml(e.message)}</p>`;
       }
     }
 

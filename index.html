@@ -76,7 +76,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, isAdmin } from "./js/auth.js?v=5";
+    import { auth, db, checkAuth, setupNavbar, isAdmin, escapeHtml, safeImageSrc } from "./js/auth.js?v=5";
     import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
     async function init() {
@@ -103,9 +103,12 @@
 
         let html = "";
         users.forEach(u => {
-          const avatar = u.photoURL
-            ? `<img src="${u.photoURL}" alt="${u.nickname}">`
-            : `<div class="participant-placeholder">${(u.firstName || u.nickname || "?")[0].toUpperCase()}</div>`;
+          const displayName = u.nickname || u.email || "Participante";
+          const photoURL = safeImageSrc(u.photoURL);
+          const initial = escapeHtml((u.firstName || displayName || "?")[0].toUpperCase());
+          const avatar = photoURL
+            ? `<img src="${photoURL}" alt="${escapeHtml(displayName)}">`
+            : `<div class="participant-placeholder">${initial}</div>`;
 
           const name = u.firstName
             ? `${u.firstName} ${u.lastName || ""}`
@@ -113,8 +116,8 @@
 
           html += `<div class="participant-card${u.email === "whiteglauber@bolao.com" ? " participant-guest" : ""}">
             ${avatar}
-            <div class="participant-nickname">${u.nickname || u.email}</div>
-            ${name ? `<div class="participant-name">${name}</div>` : ""}
+            <div class="participant-nickname">${escapeHtml(displayName)}</div>
+            ${name ? `<div class="participant-name">${escapeHtml(name)}</div>` : ""}
             ${u.email === "whiteglauber@bolao.com" ? `<div class="participant-badge">* Participante convidado. Pode ser removido a qualquer momento.</div>` : ""}
           </div>`;
         });

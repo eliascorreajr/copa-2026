@@ -32,7 +32,7 @@
   </div>
 
   <script type="module">
-    import { auth, db, signInWithEmailAndPassword } from "./js/auth.js?v=6";
+    import { auth, db, signInWithEmailAndPassword, needsFirstAccess } from "./js/auth.js?v=6";
     import { getDoc, doc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
     const form = document.getElementById("login-form");
@@ -56,7 +56,7 @@
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
           const profile = userDoc.data();
-          if (!profile.firstName || !profile.lastName) {
+          if (needsFirstAccess(profile)) {
             window.location.href = "primeiro-acesso.html";
           } else {
             window.location.href = "index.html";

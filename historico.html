@@ -40,11 +40,10 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, setupNavbar, escapeHtml } from "./js/auth.js?v=6";
     import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { buildResultLookup } from "./js/sofascore.js?v=6";
-
-    const SCORING = { exactScore: 7, correctResult: 3, wrongResult: -1 };
+    import { calculateScore, hasCompleteScore } from "./js/scoring.js?v=6";
 
     async function init() {
       const { user, profile } = await checkAuth();
@@ -52,16 +51,14 @@
       await loadHistory(user.uid);
     }
 
-    function calculateScore(guessHome, guessAway, resultHome, resultAway) {
-      if (guessHome === resultHome && guessAway === resultAway) {
-        return { points: SCORING.exactScore, type: "exact", label: "Placar Exato", css: "exact" };
-      }
-      const guessResult = guessHome > guessAway ? "home" : guessHome < guessAway ? "away" : "draw";
-      const resultResult = resultHome > resultAway ? "home" : resultHome < resultAway ? "away" : "draw";
-      if (guessResult === resultResult) {
-        return { points: SCORING.correctResult, type: "correct", label: "Resultado Correto", css: "correct" };
-      }
-      return { points: SCORING.wrongResult, type: "wrong", label: "Resultado Errado", css: "wrong" };
+    function scoreDetails(guessHome, guessAway, resultHome, resultAway) {
+      const score = calculateScore(guessHome, guessAway, resultHome, resultAway);
+      const details = {
+        exact: { label: "Placar Exato", css: "exact" },
+        correct: { label: "Resultado Correto", css: "correct" },
+        wrong: { label: "Resultado Errado", css: "wrong" }
+      };
+      return { ...score, ...(details[score.type] || { label: "Palpite Inválido", css: "wrong" }) };
     }
 
     function formatDate(dateStr) {
@@ -97,29 +94,31 @@
 
         guesses.forEach(g => {
           const result = results[g.matchId] || results[String(g.matchId)] || results[`${g.homeTeam}|${g.awayTeam}`];
-          const hasResult = result && result.homeScore !== null && result.homeScore !== undefined;
+          const hasResult = hasCompleteScore(result);
           let score = null;
           if (hasResult) {
-            score = calculateScore(g.homeScore, g.awayScore, result.homeScore, result.awayScore);
-            totalPoints += score.points;
-            if (score.type === "exact") exactCount++;
-            else if (score.type === "correct") correctCount++;
-            else wrongCount++;
+            score = scoreDetails(g.homeScore, g.awayScore, result.homeScore, result.awayScore);
+            if (score.type !== "invalid") {
+              totalPoints += score.points;
+              if (score.type === "exact") exactCount++;
+              else if (score.type === "correct") correctCount++;
+              else wrongCount++;
+            }
           }
 
           html += `<div class="card match-card${hasResult && score ? ' match-finished' : ''}" style="margin-bottom:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div>
-                <span style="font-weight:600;">${g.homeTeam}</span> 
-                <span class="score-font" style="font-size:18px;margin:0 6px;">${g.homeScore} x ${g.awayScore}</span> 
-                <span style="font-weight:600;">${g.awayTeam}</span>
+                <span style="font-weight:600;">${escapeHtml(g.homeTeam)}</span>
+                <span class="score-font" style="font-size:18px;margin:0 6px;">${escapeHtml(g.homeScore)} x ${escapeHtml(g.awayScore)}</span>
+                <span style="font-weight:600;">${escapeHtml(g.awayTeam)}</span>
               </div>
-              ${hasResult && score ? `<span class="score-result-badge ${score.css}">${score.label} (${score.points > 0 ? '+' : ''}${score.points})</span>` : '<span style="font-size:12px;color:var(--text-tertiary);">Aguardando</span>'}
+              ${hasResult && score ? `<span class="score-result-badge ${score.css}">${escapeHtml(score.label)} (${score.points > 0 ? '+' : ''}${score.points})</span>` : '<span style="font-size:12px;color:var(--text-tertiary);">Aguardando</span>'}
             </div>
             ${hasResult ? `<div style="margin-top:8px;font-size:13px;color:var(--text-tertiary);">
               Resultado oficial: <span class="score-font" style="font-size:15px;">${result.homeScore} x ${result.awayScore}</span>
             </div>` : ''}
-            ${g.createdAt ? `<div style="margin-top:4px;font-size:11px;color:var(--text-tertiary);">Palpite em: ${formatDate(g.createdAt)}</div>` : ''}
+            ${g.createdAt ? `<div style="margin-top:4px;font-size:11px;color:var(--text-tertiary);">Palpite em: ${escapeHtml(formatDate(g.createdAt))}</div>` : ''}
           </div>`;
         });
 
@@ -135,7 +134,7 @@
 
         container.innerHTML = html;
       } catch (e) {
-        container.innerHTML = `<p style="text-align:center;color:var(--accent-red);">Erro ao carregar histórico: ${e.message}</p>`;
+        container.innerHTML = `<p style="text-align:center;color:var(--accent-red);">Erro ao carregar histórico: ${escapeHtml(e.message)}</p>`;
       }
     }
 

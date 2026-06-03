@@ -1,11 +1,26 @@
-import { db } from "./auth.js";
+import { app, db } from "./auth.js";
 import { collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 import { syncAllResults } from "./sofascore.js";
+import { parseScoreInput } from "./scoring.js";
 
-export async function addNewUser(auth, email, nickname, password) {
-  const { createUserWithEmailAndPassword } = await import("https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js");
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  await setDoc(doc(db, "users", userCredential.user.uid), {
+async function createAuthUserWithoutChangingAdminSession(email, password) {
+  const { initializeApp, deleteApp } = await import("https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js");
+  const { createUserWithEmailAndPassword, getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js");
+  const secondaryApp = initializeApp(app.options, `admin-module-secondary-${Date.now()}-${Math.random()}`);
+  try {
+    const secondaryAuth = getAuth(secondaryApp);
+    const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const createdUser = credential.user;
+    await signOut(secondaryAuth);
+    return createdUser;
+  } finally {
+    await deleteApp(secondaryApp);
+  }
+}
+
+export async function addNewUser(email, nickname, password) {
+  const user = await createAuthUserWithoutChangingAdminSession(email, password);
+  await setDoc(doc(db, "users", user.uid), {
     email,
     nickname,
     firstName: "",
@@ -14,7 +29,7 @@ export async function addNewUser(auth, email, nickname, password) {
     firstAccess: true,
     createdAt: new Date().toISOString()
   });
-  return userCredential.user;
+  return user;
 }
 
 export async function listUsers() {
@@ -25,12 +40,18 @@ export async function listUsers() {
 }
 
 export async function insertManualResult(matchId, homeTeam, awayTeam, homeScore, awayScore) {
+  const parsedHome = parseScoreInput(homeScore);
+  const parsedAway = parseScoreInput(awayScore);
+  if (parsedHome === null || parsedAway === null) {
+    throw new Error("Placar invalido.");
+  }
+
   await setDoc(doc(db, "matches", `match_${matchId}`), {
     matchId,
     homeTeam,
     awayTeam,
-    homeScore,
-    awayScore,
+    homeScore: parsedHome,
+    awayScore: parsedAway,
     status: "finished",
     manualEntry: true,
     updatedAt: new Date().toISOString()
