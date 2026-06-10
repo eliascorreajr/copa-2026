@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Palpites - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=7">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -53,10 +53,10 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, showToast, formatDate, escapeHtml } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, setupNavbar, showToast, formatDate, escapeHtml } from "./js/auth.js?v=7";
     import { getDoc, doc, setDoc, deleteDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-    import { parseScoreInput } from "./js/scoring.js?v=6";
-    import { getDayKey, getMatchesByDay, isDayLocked, getDayLockInfo, getDayLockCountdown } from "./js/matches.js?v=6";
+    import { parseScoreInput } from "./js/scoring.js?v=7";
+    import { getDayKey, getMatchesByDay, isDayLocked, getDayLockInfo, getDayLockCountdown } from "./js/matches.js?v=7";
 
     let currentUser = null;
     let currentProfile = null;

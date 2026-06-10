@@ -54,20 +54,35 @@ service cloud.firestore {
         && validOptionalString(request.resource.data.migratedFrom, 128);
     }
 
-    function lockPath(dayKey) {
-      return /databases/$(database)/documents/locks/$(dayKey);
+    // Trava autoritativa POR JOGO. O id do documento e o proprio matchId.
+    // Amarra matchId -> dayKey/lockAt no servidor, impedindo que o cliente
+    // troque um jogo ja iniciado pelo dayKey de um dia futuro ainda aberto.
+    function matchLockPath(matchId) {
+      return /databases/$(database)/documents/matchLocks/$(string(matchId));
     }
 
-    function hasCanonicalLock(data) {
-      return data.dayKey is string
+    function hasMatchLock(matchId) {
+      return exists(matchLockPath(matchId));
+    }
+
+    function matchLockData(matchId) {
+      return get(matchLockPath(matchId)).data;
+    }
+
+    // O palpite so e valido se o dayKey/lockAt declarados forem exatamente os
+    // canonicos do jogo (vindos de matchLocks), nunca um dia escolhido a dedo.
+    function matchesCanonicalMatchLock(data) {
+      return data.matchId is int
+        && data.dayKey is string
         && data.lockAt is timestamp
-        && exists(lockPath(data.dayKey))
-        && data.lockAt == get(lockPath(data.dayKey)).data.lockAt;
+        && hasMatchLock(data.matchId)
+        && data.lockAt == matchLockData(data.matchId).lockAt
+        && data.dayKey == matchLockData(data.matchId).dayKey;
     }
 
-    function beforeCanonicalLock(data) {
-      return hasCanonicalLock(data)
-        && request.time < get(lockPath(data.dayKey)).data.lockAt;
+    function beforeMatchLock(data) {
+      return hasMatchLock(data.matchId)
+        && request.time < matchLockData(data.matchId).lockAt;
     }
 
     function validGuessWrite(guessId) {
@@ -82,7 +97,7 @@ service cloud.firestore {
         && validScore(request.resource.data.homeScore)
         && validScore(request.resource.data.awayScore)
         && request.resource.data.locked == true
-        && hasCanonicalLock(request.resource.data);
+        && matchesCanonicalMatchLock(request.resource.data);
     }
 
     match /users/{userId} {
@@ -94,9 +109,9 @@ service cloud.firestore {
     match /guesses/{guessId} {
       allow read: if signedIn();
       allow create, update: if isAdmin()
-        || (isGuessOwner(guessId) && validGuessWrite(guessId) && beforeCanonicalLock(request.resource.data));
+        || (isGuessOwner(guessId) && validGuessWrite(guessId) && beforeMatchLock(request.resource.data));
       allow delete: if isAdmin()
-        || (isGuessOwner(guessId) && beforeCanonicalLock(resource.data));
+        || (isGuessOwner(guessId) && beforeMatchLock(resource.data));
     }
 
     match /matches/{matchId} {
@@ -106,6 +121,12 @@ service cloud.firestore {
     }
 
     match /locks/{dayKey} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /matchLocks/{matchId} {
       allow read: if signedIn();
       allow write: if isAdmin();
       allow delete: if isAdmin();

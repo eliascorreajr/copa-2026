@@ -54,18 +54,51 @@ function buildMatchLookup(matchesData) {
   return lookup;
 }
 
+// Estrategias de busca: primeiro direto; se o CORS bloquear (comum no
+// GitHub Pages), tenta proxies CORS publicos. A insercao manual de
+// resultados continua sendo o fallback final caso tudo falhe.
+const FETCH_STRATEGIES = [
+  (u) => u,
+  (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+];
+
+async function fetchWithTimeout(url, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchRoundEvents(round) {
   const url = `${SOFASCORE_BASE_URL}/events/round/${round}`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Erro na API: ${response.status}`);
-  return await response.json();
+  let lastError = null;
+
+  for (const wrap of FETCH_STRATEGIES) {
+    try {
+      const response = await fetchWithTimeout(wrap(url));
+      if (!response.ok) {
+        lastError = new Error(`Erro na API: ${response.status}`);
+        continue;
+      }
+      return await response.json();
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Falha ao buscar eventos do SofaScore");
 }
 
 export async function syncAllResults(db, matchesData) {
-  const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js");
+  const { doc, setDoc, getDoc } = await import("https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js");
   const rounds = [1, 2, 3, 6, 5, 27, 28, 50, 29];
   let updated = 0;
   let errors = 0;
+  let skipped = 0;
 
   const matchLookup = buildMatchLookup(matchesData);
 
@@ -105,6 +138,13 @@ export async function syncAllResults(db, matchesData) {
               localAwayScore = awayScore;
             }
 
+            // Nao sobrescrever um resultado lancado/corrigido manualmente.
+            const existingSnap = await getDoc(doc(db, "matches", docId));
+            if (existingSnap.exists() && existingSnap.data().manualEntry === true) {
+              skipped++;
+              continue;
+            }
+
             await setDoc(doc(db, "matches", docId), {
               sofaScoreId: event.id,
               matchId: matchId,
@@ -133,7 +173,7 @@ export async function syncAllResults(db, matchesData) {
     }
   }
 
-  return { updated, errors };
+  return { updated, errors, skipped };
 }
 
 export function buildResultLookup(matchesSnap) {

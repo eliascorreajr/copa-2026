@@ -9,6 +9,7 @@ Este documento apresenta a análise completa dos dados disponíveis, a arquitetu
 > - Firestore Rules são mantidas em `firestore.rules` e publicadas via Firebase CLI.
 > - A trava de palpites é canônica por dia (`locks/{dayKey}`), reforçada nas Firestore Rules.
 > - Correções pós-simulação em 2026-06-03 adicionaram validação de perfil, proteção contra XSS armazenado e deploy real das rules para `bolao-copa-2026-cba87`.
+> - O site foi publicado no GitHub Pages pelo commit `3dd16ce`, e o painel admin sincronizou 34 documentos em `locks`.
 
 ---
 

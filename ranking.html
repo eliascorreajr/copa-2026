@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ranking - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=7">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -40,10 +40,10 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, escapeHtml, safeImageSrc } from "./js/auth.js?v=6";
+    import { auth, db, checkAuth, setupNavbar, escapeHtml, safeImageSrc } from "./js/auth.js?v=7";
     import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-    import { buildResultLookup } from "./js/sofascore.js?v=6";
-    import { calculateScore, hasCompleteScore } from "./js/scoring.js?v=6";
+    import { buildResultLookup } from "./js/sofascore.js?v=7";
+    import { calculateScore, hasCompleteScore } from "./js/scoring.js?v=7";
 
     async function init() {
       const { user, profile } = await checkAuth();

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel Admin - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=7">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -184,13 +184,13 @@
   </div>
 
   <script type="module">
-    import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=6";
+    import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=7";
     import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
     import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-    import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=6";
-    import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=6";
-    import { getDayKey, getDayLockInfo } from "./js/matches.js?v=6";
+    import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=7";
+    import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=7";
+    import { getDayKey, getDayLockInfo } from "./js/matches.js?v=7";
 
     let allMatchesData = null;
 
@@ -278,8 +278,23 @@
           updatedAt: new Date().toISOString()
         }, { merge: true }));
       });
+
+      // Trava POR JOGO (matchLocks/{matchId}) — usada pelas Firestore Rules
+      // para impedir edição de palpite de jogo já iniciado via dayKey futuro.
+      allMatches.forEach(match => {
+        const dayKey = getDayKey(match.date);
+        const lockInfo = getDayLockInfo(allMatchesData, dayKey);
+        if (!lockInfo) return;
+        writes.push(setDoc(doc(db, "matchLocks", String(match.id)), {
+          matchId: match.id,
+          dayKey,
+          lockAt: lockInfo.lockAt,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }));
+      });
+
       await Promise.all(writes);
-      return writes.length;
+      return days.size;
     }
 
     function getLockFieldsForMatch(matchId) {
@@ -573,10 +588,11 @@
 
       try {
         const result = await syncAllResults(db, allMatchesData);
-        statusEl.textContent = `Sincronização concluída! ${result.updated} resultado(s) atualizado(s).`;
+        const skippedMsg = result.skipped ? ` ${result.skipped} resultado(s) manual(is) preservado(s).` : "";
+        statusEl.textContent = `Sincronização concluída! ${result.updated} resultado(s) atualizado(s).${skippedMsg}`;
         statusEl.style.color = "var(--success)";
         showToast(`${result.updated} resultado(s) atualizado(s)!`, "success");
-        await addLog("SINCRONIZAÇÃO SOFASCORE", `${result.updated} resultado(s) atualizado(s), ${result.errors} erro(s)`);
+        await addLog("SINCRONIZAÇÃO SOFASCORE", `${result.updated} atualizado(s), ${result.skipped || 0} manual(is) preservado(s), ${result.errors} erro(s)`);
         loadResults();
       } catch (e) {
         statusEl.textContent = "Erro na sincronização: " + e.message;
