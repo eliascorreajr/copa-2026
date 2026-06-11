@@ -187,7 +187,7 @@
     import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=7";
     import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-    import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+    import { createUserWithEmailAndPassword, getAuth, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
     import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=7";
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=7";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=7";
@@ -460,44 +460,35 @@
     }
 
     function handleResetPassword(uid, email, nickname) {
+      // Os e-mails do bolao sao ficticios (apenas login), entao nao da para
+      // enviar link de redefinicao nem definir a senha pela chave web do painel.
+      // A redefinicao real e feita pelo dev com o script tools/redefinir-senha.sh
+      // (usa as credenciais do Firebase CLI). Aqui apenas orientamos o admin.
       const modal = document.createElement("div");
       modal.className = "modal-overlay";
       modal.style.display = "flex";
       modal.innerHTML = `<div class="modal-content">
         <h3>Redefinir Senha de ${escapeHtml(nickname)}</h3>
-        <p style="color:var(--text-secondary);margin-bottom:16px;">Isso vai enviar um e-mail de redefinição de senha para <strong>${escapeHtml(email)}</strong>.</p>
-        <small style="color:var(--text-tertiary);display:block;margin-bottom:16px;">A conta, o UID, o perfil e os palpites serão preservados.</small>
+        <p style="color:var(--text-secondary);margin-bottom:12px;">Os e-mails do bolão são fictícios (servem só como login), então <strong>não é possível enviar link de redefinição</strong> nem definir a senha por aqui.</p>
+        <p style="color:var(--text-secondary);margin-bottom:8px;">Para gerar uma senha temporária para <strong>${escapeHtml(email)}</strong>, o desenvolvedor deve rodar no terminal do projeto:</p>
+        <code style="display:block;background:var(--bg-primary);border:1px solid var(--bg-tertiary);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--accent-orange);word-break:break-all;margin-bottom:8px;">./tools/redefinir-senha.sh ${escapeHtml(email)}</code>
+        <small style="color:var(--text-tertiary);display:block;margin-bottom:16px;">A conta, o UID, o perfil e os palpites são preservados. Depois o participante pode trocar a senha em <strong>Perfil</strong>.</small>
         <div class="modal-actions">
-          <button class="btn btn-secondary" id="btn-cancel-reset">Cancelar</button>
-          <button class="btn btn-primary" id="btn-confirm-reset">Enviar E-mail</button>
+          <button class="btn btn-secondary" id="btn-cancel-reset">Fechar</button>
+          <button class="btn btn-primary" id="btn-copy-reset">Copiar comando</button>
         </div>
       </div>`;
       document.body.appendChild(modal);
 
       document.getElementById("btn-cancel-reset").addEventListener("click", () => modal.remove());
-      document.getElementById("btn-confirm-reset").addEventListener("click", async () => {
-        const btn = document.getElementById("btn-confirm-reset");
-        btn.disabled = true;
-        btn.textContent = "Enviando...";
-
+      document.getElementById("btn-copy-reset").addEventListener("click", async () => {
         try {
-          const userDoc = await getDoc(doc(db, "users", uid));
-          if (!userDoc.exists()) {
-            showToast("Usuário não encontrado no Firestore.", "error");
-            btn.disabled = false;
-            btn.textContent = "Enviar E-mail";
-            return;
-          }
-
-          await sendPasswordResetEmail(auth, email);
-          modal.remove();
-          showToast("E-mail de redefinição enviado!", "success");
-          await addLog("REDEFINIÇÃO DE SENHA", `E-mail enviado para ${email}`);
+          await navigator.clipboard.writeText(`./tools/redefinir-senha.sh ${email}`);
+          showToast("Comando copiado!", "success");
         } catch (e) {
-          showToast("Erro: " + e.message, "error");
-          btn.disabled = false;
-          btn.textContent = "Enviar E-mail";
+          showToast("Copie o comando manualmente.", "warning");
         }
+        await addLog("REDEFINIÇÃO DE SENHA", `Solicitada redefinição manual para ${email}`);
       });
     }
 

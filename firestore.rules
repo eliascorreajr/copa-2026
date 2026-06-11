@@ -45,13 +45,13 @@ service cloud.firestore {
         ])
         && request.resource.data.email == request.auth.token.email
         && validRequiredString(request.resource.data.nickname, 80)
-        && validOptionalString(request.resource.data.firstName, 80)
-        && validOptionalString(request.resource.data.lastName, 120)
-        && validOptionalString(request.resource.data.displayName, 220)
-        && validOptionalPhoto(request.resource.data.photoURL)
-        && request.resource.data.firstAccess is bool
-        && validOptionalString(request.resource.data.createdAt, 64)
-        && validOptionalString(request.resource.data.migratedFrom, 128);
+        && validOptionalString(request.resource.data.get("firstName", null), 80)
+        && validOptionalString(request.resource.data.get("lastName", null), 120)
+        && validOptionalString(request.resource.data.get("displayName", null), 220)
+        && validOptionalPhoto(request.resource.data.get("photoURL", null))
+        && request.resource.data.get("firstAccess", false) is bool
+        && validOptionalString(request.resource.data.get("createdAt", null), 64)
+        && validOptionalString(request.resource.data.get("migratedFrom", null), 128);
     }
 
     // Trava autoritativa POR JOGO. O id do documento e o proprio matchId.
