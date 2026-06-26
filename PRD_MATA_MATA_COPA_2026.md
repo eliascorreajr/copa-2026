@@ -651,7 +651,7 @@ Implementado e deployado em 2026-06-26 (commit `0c3aac2`, merge `--ff` para `mai
 
 ### 25.4 Avanço do mata-mata: prorrogação, pênaltis e quem avança (2026-06-26)
 
-**Regra confirmada:** a pontuação do bolão usa **apenas o placar ao fim dos 90 minutos** (em `js/scoring.js`). Prorrogação e pênaltis **não entram** para o ranking geral. O_ranking é _separado_ do _avanço_ da competição.
+**Regra confirmada:** a pontuação do bolão usa **apenas o placar ao fim dos 90 minutos** (em `js/scoring.js`). Prorrogação e pênaltis **não entram** para o ranking geral. O ranking é separado do avanço da competição.
 
 **Implementado:**
 
@@ -670,4 +670,45 @@ Implementado e deployado em 2026-06-26 (commit `0c3aac2`, merge `--ff` para `mai
 5. **Travas**: sem alteração — `locks`/`matchLocks` basica-se na data/hora do jogo (já relacionados).
 
 **Persistência:** o avançar do mata-mata (gerar próxima fase) não invalida palpites já salvos para esse jogo, pois o palpite está vinculado à partida (por `matchId`), independente de quem avança. O bolão pontua pelo placar dos 90 min, e o bracket segue seu fluxo paralelo de vencedores.
+
+### 25.5 Resultados manuais: filtragem, edição e correções pós-deploy (2026-06-26)
+
+**Melhorias no formulário de inserção manual (admin, aba Resultados):**
+
+1. **`populateMatchSelect` (async)** em `admin.html` agora:
+   - Lê `matches` + `bracketMatches` do Firestore;
+   - Omite do `<select>` os jogos que já têm resultado cadastrado (filtro por `matchId`, `match_{id}` e `sofaScoreId`);
+   - Para confrontos de mata-mata, sobrepõe os times do `bracketMatches` sobre o `matches.json` (mostra seleções reais quando o bracket já está resolvido);
+   - Oculta jogos de mata-mata ainda `TBD` (sem ambos os lados definidos).
+2. **Botão Editar** ao lado de Excluir em cada linha de "Resultados Cadastrados": abre um modal pré-preenchido para corrigir o placar (e os campos extras de mata-mata) sem criar duplicata — grava no mesmo `matches/match_{id}` via `setDoc` com `merge`.
+3. Após inserir/excluir/editar, o select e a lista recarregam (`loadResults` + `populateMatchSelect`).
+
+**Bug corrigido (commit `05e0182`):** template literal em `admin.html` com aspas desbalanceadas dentro de `${...}` quebrava o parse do `<script type="module">` inteiro — isso abortava `init()`, impedindo `setupNavbar` (logout e imagem paravam) e todas as funções do admin. Sintoma percebido pelo AdminSuper: logout não funcionava, imagem não carregava e a aba Resultados travava. Corrigido com expressão template refeita e `init` de `resultados.html` envolvido em `try/catch` para resiliência. Cache-bust bumped (`v=8` em resultados, `v=9` em admin).
+
+### 25.6 Validação operacional (AdminSuper, 2026-06-26)
+
+Teste ponta-a-ponta realizado pelo AdminSuper com o jogo **Brasil x Japão** (M76 da Fase de 32):
+- Seleção do jogo no `<select>` exibiu os times corretos (oriundos do `bracketMatches`).
+- Preenchimento do placar dos 90 minutos e clicar em **Salvar Resultado** gravou em `matches/match_76`.
+- Linha "Resultados Cadastrados" exibiu o placar com badge de avanço quando aplicável.
+- **Excluir** removeu o documento de `matches` e o jogo voltou a aparecer no `<select>` de inserção manual.
+- Ranking e palpites não foram afetados pela inserção/exclusão do resultado de teste (o teste não contemplou empate/prorrogação/pênaltis, mas o fluxo de campos extras é análogo).
+
+Resultado: fluxo de inserção/edição/exclusão de resultados manuais **confirmado funcional** para a fase de mata-mata.
+
+### 25.7 Fluxo operacional recomendado (AdminSuper)
+
+Para cada rodada/jornada do mata-mata, siga esta ordem:
+
+1. **Inserir resultados** (aba Resultados → Inserir/Corrigir Resultado Manualmente): o `<select>` mostra apenas jogos pendentes. Para empate nos 90 min, selicione Quem avançou + Método (Prorrogação/Pênaltis) + placares extras (opcionais). Ao salvar, o vencedor é propagado automaticamente para o próximo confronto em `bracketMatches`.
+2. **Recalcular Classificação** (aba Mata-Mata): reprocessa `standings` e `thirdPlaceRanking` com base nos resultados oficiais inseridos.
+3. **Gerar/Atualizar Mata-Mata** (aba Mata-Mata): reescreve `bracketMatches` no Firestore com os classificados atualizados, preservando `manualOverride`.
+4. **Sincronizar Travas** (aba Resultados): atualiza `locks/{dayKey}` e `matchLocks/{matchId}` com as datas/horários reais dos jogos (incluindo datas editadas de mata-mata).
+5. **Exportar Mata-Mata** (aba Mata-Mata, opcional): CSV com classificação, melhores terceiros e confrontos para auditoria/compartilhamento.
+
+**Observações:**
+- A pontuação do ranking usa só os 90 minutos; prorrogação/pênaltis não entram.
+- O avançar de um confronto (quem vai à próxima fase) está separado da pontuação do bolão.
+- Palpites já salvos não são invalidados quando o bracket avança — ficam vinculados à partida por `matchId`.
+- Grupos incompletos ou terceiros com `needsManualTiebreak` exigem ação manual do AdminSuper (override no modal de edição de confronto ou em `standings`).
 
