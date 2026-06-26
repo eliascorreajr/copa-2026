@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel Admin - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=7">
+  <link rel="stylesheet" href="css/style.css?v=8">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -217,14 +217,14 @@
   </div>
 
   <script type="module">
-    import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=7";
+    import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=8";
     import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
     import { createUserWithEmailAndPassword, getAuth, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-    import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=7";
-    import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=7";
-    import { getDayKey, getDayLockInfo } from "./js/matches.js?v=7";
-    import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=8";
+    import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=8";
+    import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=8";
+    import { getDayKey, getDayLockInfo } from "./js/matches.js?v=8";
+    import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=9";
     import { createBracketTemplate, resolveFixedSlots } from "./js/worldcup-bracket.js?v=9";
     import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
 
