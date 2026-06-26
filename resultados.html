@@ -47,6 +47,7 @@
     import { buildResultLookup } from "./js/sofascore.js?v=7";
 
     let matchesData = null;
+    let bracketMatches = {};
     let currentRound = 1;
 
     async function init() {
@@ -61,9 +62,64 @@
       try {
         const response = await fetch("data/matches.json");
         matchesData = await response.json();
+        await loadBracketMatches();
       } catch (e) {
         console.error("Erro ao carregar matches.json", e);
       }
+    }
+
+    async function loadBracketMatches() {
+      try {
+        const snap = await getDocs(collection(db, "bracketMatches"));
+        bracketMatches = {};
+        snap.forEach(docSnap => {
+          const data = docSnap.data();
+          const matchId = data.matchId ?? data.id ?? docSnap.id.replace(/^match_/, "");
+          if (matchId !== undefined && matchId !== null) {
+            bracketMatches[String(matchId)] = data;
+          }
+          bracketMatches[docSnap.id] = data;
+        });
+      } catch (e) {
+        console.error("Erro ao carregar bracketMatches", e);
+        bracketMatches = {};
+      }
+    }
+
+    function isKnockout(match) {
+      return Boolean(match.stage);
+    }
+
+    function sideLabel(match, bracket, side) {
+      const team = bracket[`${side}Team`];
+      const source = bracket[`${side}Source`];
+      if (team && team !== "TBD") return team;
+      if (source) return source;
+      return match[`${side}Team`];
+    }
+
+    function loadBracketMatch(match) {
+      if (!isKnockout(match)) return match;
+      const bracket = bracketMatches[String(match.id)] || bracketMatches[`match_${match.id}`];
+      if (!bracket) return match;
+      return {
+        ...match,
+        date: bracket.date || match.date,
+        status: bracket.status || match.status,
+        homeTeam: sideLabel(match, bracket, "home"),
+        awayTeam: sideLabel(match, bracket, "away"),
+        homeSource: bracket.homeSource,
+        awaySource: bracket.awaySource,
+        homeResolved: bracket.homeResolved,
+        awayResolved: bracket.awayResolved
+      };
+    }
+
+    function waitingLabel(match) {
+      if (isKnockout(match) && (match.status === "pending" || match.status === "partially_defined")) {
+        return "Aguardando definição";
+      }
+      return "Aguardando resultado";
     }
 
     function getAllRounds() {
@@ -86,7 +142,9 @@
       if (typeof round === "number") {
         return matchesData.groupMatches.filter(m => m.round === round);
       }
-      return matchesData.knockoutMatches.filter(m => m.stage === round);
+      return matchesData.knockoutMatches
+        .filter(m => m.stage === round)
+        .map(loadBracketMatch);
     }
 
     function setupRoundTabs() {
@@ -162,7 +220,7 @@
               <div class="team-name">${escapeHtml(m.awayTeam)}</div>
             </div>
           </div>
-          ${hasResult ? '' : '<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-tertiary);">Aguardando resultado</div>'}
+          ${hasResult ? '' : `<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-tertiary);">${escapeHtml(waitingLabel(m))}</div>`}
         </div>`;
       });
 

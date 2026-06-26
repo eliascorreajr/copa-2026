@@ -33,6 +33,7 @@
       <button class="admin-tab active" data-tab="results">Resultados</button>
       <button class="admin-tab" data-tab="users">Usuários</button>
       <button class="admin-tab" data-tab="guesses">Palpites</button>
+      <button class="admin-tab" data-tab="knockout">Mata-Mata</button>
       <button class="admin-tab" data-tab="logs">Logs</button>
     </div>
 
@@ -109,6 +110,37 @@
         </div>
         <div class="card" id="all-guesses">
           <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-knockout" class="admin-panel" style="display:none;">
+      <div class="admin-section">
+        <h3>Classificação e Mata-Mata</h3>
+        <div class="card">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary" id="btn-recalculate-standings">Recalcular Classificação</button>
+            <button class="btn btn-secondary" id="btn-generate-bracket">Gerar/Atualizar Mata-Mata</button>
+          </div>
+          <div id="knockout-status" style="margin-top:12px;font-size:13px;color:var(--text-tertiary);"></div>
+        </div>
+      </div>
+      <div class="admin-section">
+        <h3>Grupos</h3>
+        <div class="card" id="standings-review">
+          <p style="color:var(--text-tertiary);">Clique em recalcular para revisar a classificação.</p>
+        </div>
+      </div>
+      <div class="admin-section">
+        <h3>Melhores Terceiros</h3>
+        <div class="card" id="third-place-review">
+          <p style="color:var(--text-tertiary);">Clique em recalcular para revisar os melhores terceiros.</p>
+        </div>
+      </div>
+      <div class="admin-section">
+        <h3>Confrontos</h3>
+        <div class="card" id="bracket-review">
+          <p style="color:var(--text-tertiary);">Clique em gerar para revisar os confrontos do mata-mata.</p>
         </div>
       </div>
     </div>
@@ -191,8 +223,14 @@
     import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=7";
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=7";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=7";
+    import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=8";
+    import { createBracketTemplate, resolveFixedSlots } from "./js/worldcup-bracket.js?v=8";
+    import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches } from "./js/worldcup-admin.js?v=8";
 
+    const ENABLE_SOFASCORE_SYNC = false;
     let allMatchesData = null;
+    let lockMatchesData = null;
+    let currentBracketReview = [];
 
     async function createAuthUserWithoutChangingAdminSession(email, password) {
       const secondaryApp = initializeApp(app.options, `admin-secondary-${Date.now()}-${Math.random()}`);
@@ -212,6 +250,7 @@
       setupNavbar(profile);
       await loadMatchesData();
       setupTabs();
+      setupSofaScoreSyncState();
       loadResults();
       loadUsers();
       loadAllGuesses();
@@ -230,6 +269,20 @@
       });
     }
 
+    function setupSofaScoreSyncState() {
+      if (ENABLE_SOFASCORE_SYNC) return;
+      const btn = document.getElementById("btn-sync");
+      const statusEl = document.getElementById("sync-status");
+      if (btn) {
+        btn.disabled = true;
+        btn.title = "Sincronização SofaScore desativada nesta fase.";
+      }
+      if (statusEl) {
+        statusEl.textContent = "Sincronização SofaScore desativada nesta fase. Use resultados manuais como fonte oficial.";
+        statusEl.style.color = "var(--text-tertiary)";
+      }
+    }
+
     async function loadMatchesData() {
       try {
         const response = await fetch("data/matches.json");
@@ -243,11 +296,11 @@
         const synced = await syncLockDocuments();
         const statusEl = document.getElementById("locks-status");
         if (statusEl) {
-          statusEl.textContent = `Travas sincronizadas automaticamente: ${synced} dia(s).`;
+          statusEl.textContent = `Travas sincronizadas automaticamente: ${synced} dia(s). matchLocks atualizados.`;
           statusEl.style.color = "var(--success)";
         }
       } catch (e) {
-        console.warn("Erro ao sincronizar travas por dia:", e);
+        console.warn("Erro ao sincronizar travas por dia e por jogo:", e);
         const statusEl = document.getElementById("locks-status");
         if (statusEl) {
           statusEl.textContent = "Erro ao sincronizar travas: " + e.message;
@@ -256,10 +309,44 @@
       }
     }
 
+    function getMatchDocumentKey(match) {
+      return String(match?.matchId ?? match?.id ?? "");
+    }
+
+    function getAllMatchesForLocks(matchesData) {
+      if (!matchesData) return [];
+      return [
+        ...(matchesData.groupMatches || []),
+        ...(matchesData.knockoutMatches || [])
+      ];
+    }
+
+    async function getMatchesDataForLocks() {
+      if (!allMatchesData) return null;
+
+      const bracketMatches = await loadBracketMatches(db);
+      const bracketDatesById = new Map();
+      bracketMatches.forEach(match => {
+        if (match?.date) {
+          bracketDatesById.set(getMatchDocumentKey(match), match.date);
+        }
+      });
+
+      return {
+        ...allMatchesData,
+        groupMatches: [...(allMatchesData.groupMatches || [])],
+        knockoutMatches: (allMatchesData.knockoutMatches || []).map(match => {
+          const editedDate = bracketDatesById.get(getMatchDocumentKey(match));
+          return editedDate ? { ...match, date: editedDate } : match;
+        })
+      };
+    }
+
     async function syncLockDocuments() {
       if (!allMatchesData) return 0;
       const days = new Map();
-      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
+      lockMatchesData = await getMatchesDataForLocks();
+      const allMatches = getAllMatchesForLocks(lockMatchesData);
       allMatches.forEach(match => {
         const dayKey = getDayKey(match.date);
         if (!days.has(dayKey)) days.set(dayKey, []);
@@ -268,7 +355,7 @@
 
       const writes = [];
       days.forEach((matches, dayKey) => {
-        const lockInfo = getDayLockInfo(allMatchesData, dayKey);
+        const lockInfo = getDayLockInfo(lockMatchesData, dayKey);
         if (!lockInfo) return;
         writes.push(setDoc(doc(db, "locks", dayKey), {
           dayKey,
@@ -283,7 +370,7 @@
       // para impedir edição de palpite de jogo já iniciado via dayKey futuro.
       allMatches.forEach(match => {
         const dayKey = getDayKey(match.date);
-        const lockInfo = getDayLockInfo(allMatchesData, dayKey);
+        const lockInfo = getDayLockInfo(lockMatchesData, dayKey);
         if (!lockInfo) return;
         writes.push(setDoc(doc(db, "matchLocks", String(match.id)), {
           matchId: match.id,
@@ -298,12 +385,13 @@
     }
 
     function getLockFieldsForMatch(matchId) {
-      if (!allMatchesData) return {};
-      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
+      const matchesData = lockMatchesData || allMatchesData;
+      if (!matchesData) return {};
+      const allMatches = getAllMatchesForLocks(matchesData);
       const match = allMatches.find(m => m.id === Number(matchId));
       if (!match) return {};
       const dayKey = getDayKey(match.date);
-      const lockInfo = getDayLockInfo(allMatchesData, dayKey);
+      const lockInfo = getDayLockInfo(matchesData, dayKey);
       if (!lockInfo) return {};
       return {
         dayKey,
@@ -570,7 +658,501 @@
       }
     }
 
+    function setKnockoutStatus(message, type = "info") {
+      const statusEl = document.getElementById("knockout-status");
+      if (!statusEl) return;
+      statusEl.textContent = message;
+      statusEl.style.color = type === "success"
+        ? "var(--success)"
+        : type === "error"
+          ? "var(--accent-red)"
+          : "var(--text-tertiary)";
+    }
+
+    async function loadResultsByMatchId() {
+      const snap = await getDocs(collection(db, "matches"));
+      const lookup = buildResultLookup(snap);
+      const resultsByDocId = {};
+      const resultsByMatchId = {};
+
+      snap.forEach(d => {
+        const data = d.data();
+        resultsByDocId[d.id] = data;
+        if (data.matchId !== null && data.matchId !== undefined) {
+          resultsByMatchId[data.matchId] = data;
+          resultsByMatchId[String(data.matchId)] = data;
+        }
+      });
+
+      const allMatches = [
+        ...(allMatchesData?.groupMatches || []),
+        ...(allMatchesData?.knockoutMatches || [])
+      ];
+      allMatches.forEach(match => {
+        const result = resultsByMatchId[match.id]
+          || resultsByMatchId[String(match.id)]
+          || resultsByDocId[`match_${match.id}`]
+          || lookup[`match_${match.id}`]
+          || lookup[`${match.homeTeam}|${match.awayTeam}`];
+        if (!result) return;
+        resultsByMatchId[match.id] = result;
+        resultsByMatchId[String(match.id)] = result;
+      });
+
+      return resultsByMatchId;
+    }
+
+    function renderStandingsReview(standings) {
+      const container = document.getElementById("standings-review");
+      if (!container) return;
+
+      const groups = Object.keys(standings || {}).sort();
+      if (groups.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-tertiary);">Nenhum grupo encontrado.</p>';
+        return;
+      }
+
+      let html = "";
+      groups.forEach(group => {
+        const snapshot = standings[group];
+        const completeText = snapshot.complete ? "Completo" : "Incompleto";
+        html += `<div style="margin-bottom:24px;">
+          <h4 style="margin-bottom:8px;color:var(--text-primary);">Grupo ${escapeHtml(group)} <span style="font-size:12px;color:var(--text-tertiary);">(${escapeHtml(completeText)})</span></h4>
+          <table class="ranking-table">
+            <thead>
+              <tr><th>Pos</th><th>Seleção</th><th>Pts</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th><th>Obs</th></tr>
+            </thead>
+            <tbody>`;
+        (snapshot.teams || []).forEach(team => {
+          const note = team.needsManualTiebreak ? "Desempate manual" : "-";
+          html += `<tr>
+            <td>${escapeHtml(team.position)}</td>
+            <td>${escapeHtml(team.team)}</td>
+            <td>${escapeHtml(team.points)}</td>
+            <td>${escapeHtml(team.played)}</td>
+            <td>${escapeHtml(team.wins)}</td>
+            <td>${escapeHtml(team.draws)}</td>
+            <td>${escapeHtml(team.losses)}</td>
+            <td>${escapeHtml(team.goalsFor)}</td>
+            <td>${escapeHtml(team.goalsAgainst)}</td>
+            <td>${escapeHtml(team.goalDifference)}</td>
+            <td style="font-size:12px;color:var(--text-tertiary);">${escapeHtml(note)}</td>
+          </tr>`;
+        });
+        html += "</tbody></table></div>";
+      });
+
+      container.innerHTML = html;
+    }
+
+    function renderThirdPlaceReview(ranking) {
+      const container = document.getElementById("third-place-review");
+      if (!container) return;
+
+      const teams = ranking?.teams || [];
+      if (teams.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-tertiary);">Nenhum terceiro colocado calculado.</p>';
+        return;
+      }
+
+      const completeText = ranking.complete ? "Completo" : "Incompleto";
+      let html = `<p style="color:var(--text-tertiary);margin-bottom:12px;">Ranking ${escapeHtml(completeText)}.</p>
+        <table class="ranking-table">
+          <thead>
+            <tr><th>Rank</th><th>Grupo</th><th>Seleção</th><th>Pts</th><th>SG</th><th>GP</th><th>Status</th><th>Obs</th></tr>
+          </thead>
+          <tbody>`;
+      teams.forEach(team => {
+        const status = team.qualified ? "Classificado" : "Fora";
+        const note = team.needsManualTiebreak ? "Desempate manual" : "-";
+        html += `<tr>
+          <td>${escapeHtml(team.rank)}</td>
+          <td>${escapeHtml(team.group)}</td>
+          <td>${escapeHtml(team.team)}</td>
+          <td>${escapeHtml(team.points)}</td>
+          <td>${escapeHtml(team.goalDifference)}</td>
+          <td>${escapeHtml(team.goalsFor)}</td>
+          <td>${escapeHtml(status)}</td>
+          <td style="font-size:12px;color:var(--text-tertiary);">${escapeHtml(note)}</td>
+        </tr>`;
+      });
+      html += "</tbody></table>";
+      container.innerHTML = html;
+    }
+
+    function getStageLabel(stage) {
+      const labels = {
+        "round-of-32": "Fase 32",
+        "round-of-16": "Oitavas",
+        "quarterfinals": "Quartas",
+        "semifinals": "Semi",
+        "third-place": "3º Lugar",
+        "final": "Final"
+      };
+      return labels[stage] || stage || "-";
+    }
+
+    const BRACKET_EDIT_FIELDS = ["homeTeam", "awayTeam", "date", "status", "winner", "loser", "notes", "reason"];
+
+    function getBracketMatchKey(match) {
+      return String(match?.matchId ?? match?.id ?? "");
+    }
+
+    function getBracketFieldValue(match, field) {
+      const value = match?.[field];
+      return value === null || value === undefined ? "" : String(value);
+    }
+
+    function getManualFields(match) {
+      return (match?.manualFields && typeof match.manualFields === "object") ? match.manualFields : {};
+    }
+
+    function hasBracketFieldOverride(match, field) {
+      const manualFields = getManualFields(match);
+      if (Object.keys(manualFields).length > 0) return manualFields[field] === true;
+      if (field === "homeTeam" && match?.homeManualOverride === true) return true;
+      if (field === "awayTeam" && match?.awayManualOverride === true) return true;
+      return match?.manualOverride === true;
+    }
+
+    function mergeManualBracketOverrides(generatedBracket, existingBracket) {
+      const existingById = new Map((existingBracket || []).map(match => [getBracketMatchKey(match), match]));
+
+      return (generatedBracket || []).map(match => {
+        const existing = existingById.get(getBracketMatchKey(match));
+        if (!existing) return match;
+
+        const merged = {
+          ...match,
+          manualOverride: existing.manualOverride === true,
+          homeManualOverride: existing.homeManualOverride === true,
+          awayManualOverride: existing.awayManualOverride === true,
+          manualFields: getManualFields(existing)
+        };
+
+        BRACKET_EDIT_FIELDS.forEach(field => {
+          if (hasBracketFieldOverride(existing, field)) {
+            merged[field] = existing[field];
+            merged.manualOverride = true;
+          }
+        });
+
+        return merged;
+      });
+    }
+
+    function getBracketMatchFromReview(matchId) {
+      return currentBracketReview.find(match => getBracketMatchKey(match) === String(matchId));
+    }
+
+    function closeEditBracketModal() {
+      const modal = document.getElementById("edit-bracket-modal");
+      if (modal) modal.remove();
+    }
+
+    function renderEditBracketModal(match) {
+      closeEditBracketModal();
+
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay";
+      modal.id = "edit-bracket-modal";
+      modal.style.display = "flex";
+      modal.innerHTML = `<div class="modal-content">
+        <h3>Editar ${escapeHtml(match.code || `M${match.matchId}`)}</h3>
+        <input type="hidden" id="edit-bracket-match-id" value="${escapeHtml(getBracketMatchKey(match))}">
+        <div class="form-group">
+          <label for="edit-bracket-home-team">Mandante</label>
+          <input type="text" id="edit-bracket-home-team" value="${escapeHtml(getBracketFieldValue(match, "homeTeam"))}" placeholder="TBD">
+        </div>
+        <div class="form-group">
+          <label for="edit-bracket-away-team">Visitante</label>
+          <input type="text" id="edit-bracket-away-team" value="${escapeHtml(getBracketFieldValue(match, "awayTeam"))}" placeholder="TBD">
+        </div>
+        <div class="form-group">
+          <label for="edit-bracket-date">Data</label>
+          <input type="text" id="edit-bracket-date" value="${escapeHtml(getBracketFieldValue(match, "date"))}" placeholder="2026-06-28T16:00:00-03:00">
+        </div>
+        <div class="form-group">
+          <label for="edit-bracket-status">Status</label>
+          <select id="edit-bracket-status" style="width:100%;">
+            ${["pending", "partially_defined", "defined", "finished"].map(status => (
+              `<option value="${escapeHtml(status)}" ${getBracketFieldValue(match, "status") === status ? "selected" : ""}>${escapeHtml(status)}</option>`
+            )).join("")}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-bracket-winner">Vencedor</label>
+          <input type="text" id="edit-bracket-winner" value="${escapeHtml(getBracketFieldValue(match, "winner"))}" placeholder="Seleção vencedora">
+        </div>
+        <div class="form-group">
+          <label for="edit-bracket-loser">Perdedor</label>
+          <input type="text" id="edit-bracket-loser" value="${escapeHtml(getBracketFieldValue(match, "loser"))}" placeholder="Seleção perdedora">
+        </div>
+        <div class="form-group">
+          <label for="edit-bracket-notes">Notas</label>
+          <textarea id="edit-bracket-notes" rows="2" style="width:100%;" placeholder="Observações">${escapeHtml(getBracketFieldValue(match, "notes"))}</textarea>
+        </div>
+        <div class="form-group">
+          <label for="edit-bracket-reason">Motivo</label>
+          <textarea id="edit-bracket-reason" rows="2" style="width:100%;" placeholder="Motivo da correção manual">${escapeHtml(getBracketFieldValue(match, "reason"))}</textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="btn-cancel-edit-bracket">Cancelar</button>
+          <button class="btn btn-primary" id="btn-save-edit-bracket">Salvar</button>
+        </div>
+      </div>`;
+
+      document.body.appendChild(modal);
+      document.getElementById("btn-cancel-edit-bracket").addEventListener("click", closeEditBracketModal);
+      document.getElementById("btn-save-edit-bracket").addEventListener("click", saveEditedBracketMatch);
+    }
+
+    function getEditedBracketValues() {
+      return {
+        homeTeam: document.getElementById("edit-bracket-home-team").value.trim(),
+        awayTeam: document.getElementById("edit-bracket-away-team").value.trim(),
+        date: document.getElementById("edit-bracket-date").value.trim(),
+        status: document.getElementById("edit-bracket-status").value,
+        winner: document.getElementById("edit-bracket-winner").value.trim(),
+        loser: document.getElementById("edit-bracket-loser").value.trim(),
+        notes: document.getElementById("edit-bracket-notes").value.trim(),
+        reason: document.getElementById("edit-bracket-reason").value.trim()
+      };
+    }
+
+    async function saveEditedBracketMatch() {
+      const btn = document.getElementById("btn-save-edit-bracket");
+      const matchId = document.getElementById("edit-bracket-match-id").value;
+      const original = getBracketMatchFromReview(matchId);
+      if (!original) {
+        showToast("Confronto não encontrado.", "error");
+        return;
+      }
+
+      const editedValues = getEditedBracketValues();
+      const auditReason = editedValues.reason || "Correção manual de confronto";
+      const changedFields = BRACKET_EDIT_FIELDS.filter(field => (
+        getBracketFieldValue(original, field) !== editedValues[field]
+      ));
+      const dateChanged = changedFields.includes("date");
+
+      if (changedFields.length === 0) {
+        closeEditBracketModal();
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+
+      try {
+        for (const field of changedFields) {
+          await saveManualOverride(db, {
+            entityType: "bracketMatch",
+            entityId: String(matchId),
+            field,
+            previousValue: getBracketFieldValue(original, field),
+            newValue: editedValues[field],
+            adminEmail: auth.currentUser?.email || "unknown",
+            reason: auditReason
+          });
+        }
+
+        const manualFields = {
+          ...getManualFields(original)
+        };
+        changedFields.forEach(field => {
+          manualFields[field] = true;
+        });
+
+        const updatedMatch = {
+          ...original,
+          ...editedValues,
+          matchId: Number(original.matchId ?? original.id ?? matchId),
+          manualOverride: true,
+          homeManualOverride: manualFields.homeTeam === true,
+          awayManualOverride: manualFields.awayTeam === true,
+          manualFields,
+          updatedAt: new Date().toISOString()
+        };
+
+        await setDoc(doc(db, "bracketMatches", String(matchId)), updatedMatch, { merge: true });
+
+        let lockSyncDetail = "";
+        let lockSyncFailed = false;
+        if (dateChanged) {
+          try {
+            const syncedLocks = await syncLockDocuments();
+            lockSyncDetail = `; travas/matchLocks sincronizadas (${syncedLocks} dia(s))`;
+            const statusEl = document.getElementById("locks-status");
+            if (statusEl) {
+              statusEl.textContent = `Travas sincronizadas após edição: ${syncedLocks} dia(s). matchLocks atualizados.`;
+              statusEl.style.color = "var(--success)";
+            }
+          } catch (lockError) {
+            lockSyncFailed = true;
+            lockSyncDetail = `; erro ao sincronizar travas/matchLocks: ${lockError.message}`;
+            const statusEl = document.getElementById("locks-status");
+            if (statusEl) {
+              statusEl.textContent = "Erro ao sincronizar travas após edição: " + lockError.message;
+              statusEl.style.color = "var(--accent-red)";
+            }
+            showToast("Confronto salvo, mas as travas não foram sincronizadas.", "warning");
+            await addLog("ERRO TRAVAS", `Mata-mata ${updatedMatch.code || `M${matchId}`}: ${lockError.message}`);
+          }
+        }
+
+        currentBracketReview = currentBracketReview.map(match => (
+          getBracketMatchKey(match) === String(matchId) ? updatedMatch : match
+        ));
+        renderBracketReview(currentBracketReview);
+        closeEditBracketModal();
+        if (!lockSyncFailed) {
+          showToast(dateChanged ? "Confronto atualizado e travas sincronizadas!" : "Confronto atualizado!", "success");
+        }
+        await addLog("MATA-MATA EDITADO", `${updatedMatch.code || `M${matchId}`}: ${changedFields.join(", ")}${lockSyncDetail}`);
+      } catch (e) {
+        showToast("Erro ao salvar confronto: " + e.message, "error");
+        btn.disabled = false;
+        btn.textContent = "Salvar";
+      }
+    }
+
+    function renderBracketReview(bracket) {
+      const container = document.getElementById("bracket-review");
+      if (!container) return;
+      currentBracketReview = Array.isArray(bracket) ? bracket : [];
+
+      if (!Array.isArray(bracket) || bracket.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-tertiary);">Nenhum confronto gerado.</p>';
+        return;
+      }
+
+      let html = `<table class="ranking-table">
+        <thead>
+          <tr><th>Jogo</th><th>Fase</th><th>Mandante</th><th>Visitante</th><th>Origem</th><th>Status</th><th>Ações</th></tr>
+        </thead>
+        <tbody>`;
+      bracket.forEach(match => {
+        const source = `${match.homeSource || "-"} x ${match.awaySource || "-"}`;
+        const matchup = `${match.homeTeam || "TBD"} x ${match.awayTeam || "TBD"}`;
+        const manualText = match.manualOverride ? " (manual)" : "";
+        html += `<tr>
+          <td>${escapeHtml(match.code || `M${match.matchId}`)}</td>
+          <td>${escapeHtml(getStageLabel(match.stage))}</td>
+          <td>${escapeHtml(match.homeTeam || "TBD")}</td>
+          <td>${escapeHtml(match.awayTeam || "TBD")}</td>
+          <td style="font-size:12px;color:var(--text-tertiary);" title="${escapeHtml(matchup)}">${escapeHtml(source)}</td>
+          <td>${escapeHtml(`${match.status || "pending"}${manualText}`)}</td>
+          <td><button class="btn btn-secondary btn-sm btn-edit-bracket" data-edit-bracket="${escapeHtml(getBracketMatchKey(match))}" style="padding:4px 10px;font-size:12px;">Editar</button></td>
+        </tr>`;
+      });
+      html += "</tbody></table>";
+      container.innerHTML = html;
+
+      container.querySelectorAll("[data-edit-bracket]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const match = getBracketMatchFromReview(btn.dataset.editBracket);
+          if (match) renderEditBracketModal(match);
+        });
+      });
+    }
+
+    function withGeneratedAt(standings) {
+      const generatedAt = new Date().toISOString();
+      return Object.fromEntries(Object.entries(standings || {}).map(([group, snapshot]) => [
+        group,
+        {
+          ...snapshot,
+          group: snapshot.group || group,
+          generatedAt,
+          manualOverride: snapshot.manualOverride === true
+        }
+      ]));
+    }
+
+    async function calculateAndSaveStandings() {
+      if (!allMatchesData) throw new Error("Tabela de jogos ainda não foi carregada.");
+      const resultsByMatchId = await loadResultsByMatchId();
+      const standings = withGeneratedAt(calculateAllGroupStandings(allMatchesData, resultsByMatchId));
+      const thirdPlaceRanking = {
+        ...calculateThirdPlaceRanking(standings),
+        generatedAt: new Date().toISOString()
+      };
+
+      renderStandingsReview(standings);
+      renderThirdPlaceReview(thirdPlaceRanking);
+
+      await saveStandingsSnapshot(db, standings);
+      await saveThirdPlaceRanking(db, thirdPlaceRanking);
+      return { standings, thirdPlaceRanking };
+    }
+
+    document.getElementById("btn-recalculate-standings").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-recalculate-standings");
+      btn.disabled = true;
+      setKnockoutStatus("Recalculando classificação...", "info");
+
+      try {
+        const { standings, thirdPlaceRanking } = await calculateAndSaveStandings();
+        const incompleteGroups = Object.values(standings).filter(snapshot => !snapshot.complete).length;
+        const manualTieCount = Object.values(standings)
+          .flatMap(snapshot => snapshot.teams || [])
+          .filter(team => team.needsManualTiebreak).length
+          + (thirdPlaceRanking.teams || []).filter(team => team.needsManualTiebreak).length;
+        const incompleteText = incompleteGroups ? ` ${incompleteGroups} grupo(s) incompleto(s).` : "";
+        const tieText = manualTieCount ? ` ${manualTieCount} item(ns) precisam de desempate manual.` : "";
+        setKnockoutStatus(`Classificação e terceiros salvos.${incompleteText}${tieText}`, "success");
+        showToast("Classificação recalculada!", "success");
+        await addLog("CLASSIFICAÇÃO RECALCULADA", `Grupos: ${Object.keys(standings).length}; terceiros: ${(thirdPlaceRanking.teams || []).length}`);
+      } catch (e) {
+        setKnockoutStatus("Erro ao recalcular classificação: " + e.message, "error");
+        showToast("Erro ao recalcular classificação", "error");
+        await addLog("ERRO CLASSIFICAÇÃO", e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("btn-generate-bracket").addEventListener("click", async () => {
+      const btn = document.getElementById("btn-generate-bracket");
+      btn.disabled = true;
+      setKnockoutStatus("Gerando mata-mata...", "info");
+
+      try {
+        const { standings } = await calculateAndSaveStandings();
+        const bracketTemplate = createBracketTemplate();
+        const generatedBracket = resolveFixedSlots(bracketTemplate, standings);
+        const existingBracket = await loadBracketMatches(db);
+        const bracket = mergeManualBracketOverrides(generatedBracket, existingBracket);
+
+        renderBracketReview(bracket);
+        await saveBracketMatches(db, bracket);
+
+        const definedMatches = bracket.filter(match => match.status === "defined").length;
+        const partialMatches = bracket.filter(match => match.status === "partially_defined").length;
+        setKnockoutStatus(`Mata-mata salvo. ${definedMatches} confronto(s) definido(s), ${partialMatches} parcialmente definido(s).`, "success");
+        showToast("Mata-mata gerado!", "success");
+        await addLog("MATA-MATA GERADO", `${bracket.length} jogo(s); ${definedMatches} definido(s); ${partialMatches} parcial(is)`);
+      } catch (e) {
+        setKnockoutStatus("Erro ao gerar mata-mata: " + e.message, "error");
+        showToast("Erro ao gerar mata-mata", "error");
+        await addLog("ERRO MATA-MATA", e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     document.getElementById("btn-sync").addEventListener("click", async () => {
+      if (!ENABLE_SOFASCORE_SYNC) {
+        const statusEl = document.getElementById("sync-status");
+        if (statusEl) {
+          statusEl.textContent = "Sincronização SofaScore desativada nesta fase. Use resultados manuais como fonte oficial.";
+          statusEl.style.color = "var(--text-tertiary)";
+        }
+        showToast("SofaScore desativado nesta fase.", "warning");
+        return;
+      }
+
       const statusEl = document.getElementById("sync-status");
       const btn = document.getElementById("btn-sync");
       btn.disabled = true;
@@ -604,10 +1186,10 @@
 
       try {
         const synced = await syncLockDocuments();
-        statusEl.textContent = `Travas sincronizadas: ${synced} dia(s).`;
+        statusEl.textContent = `Travas sincronizadas: ${synced} dia(s). matchLocks atualizados.`;
         statusEl.style.color = "var(--success)";
-        showToast(`${synced} trava(s) sincronizada(s)!`, "success");
-        await addLog("TRAVAS SINCRONIZADAS", `${synced} documento(s) locks atualizado(s)`);
+        showToast(`${synced} trava(s) e matchLocks sincronizados!`, "success");
+        await addLog("TRAVAS SINCRONIZADAS", `${synced} documento(s) locks atualizado(s); matchLocks atualizados`);
       } catch (e) {
         statusEl.textContent = "Erro ao sincronizar travas: " + e.message;
         statusEl.style.color = "var(--accent-red)";

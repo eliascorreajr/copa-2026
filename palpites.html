@@ -61,6 +61,7 @@
     let currentUser = null;
     let currentProfile = null;
     let matchesData = [];
+    let bracketMatches = {};
     let userGuesses = {};
     let currentDay = null;
 
@@ -78,6 +79,8 @@
       try {
         const response = await fetch("data/matches.json");
         matchesData = await response.json();
+        await loadBracketMatches();
+        applyBracketMatches();
         const guessSnap = await getDocs(query(collection(db, "guesses"), where("userId", "==", currentUser.uid)));
         userGuesses = {};
         guessSnap.forEach(d => {
@@ -87,6 +90,82 @@
       } catch (e) {
         showToast("Erro ao carregar jogos", "error");
       }
+    }
+
+    async function loadBracketMatches() {
+      try {
+        const snap = await getDocs(collection(db, "bracketMatches"));
+        bracketMatches = {};
+        snap.forEach(docSnap => {
+          const data = docSnap.data();
+          const matchId = data.matchId ?? data.id ?? docSnap.id.replace(/^match_/, "");
+          if (matchId !== undefined && matchId !== null) {
+            bracketMatches[String(matchId)] = data;
+          }
+          bracketMatches[docSnap.id] = data;
+        });
+      } catch (e) {
+        console.error("Erro ao carregar bracketMatches", e);
+        bracketMatches = {};
+      }
+    }
+
+    function isKnockout(match) {
+      return Boolean(match.stage);
+    }
+
+    function sideLabel(match, bracket, side) {
+      const status = bracket.status;
+      const team = bracket[`${side}Team`];
+      const source = bracket[`${side}Source`];
+      if (status === "defined" && team && team !== "TBD") return team;
+      if (status === "pending" || status === "partially_defined") return source || team || match[`${side}Team`];
+      return team || source || match[`${side}Team`];
+    }
+
+    function hasResolvedTeam(team) {
+      return Boolean(team && team !== "TBD");
+    }
+
+    function isSideResolved(match, side) {
+      return match[`${side}Resolved`] !== false && hasResolvedTeam(match[`${side}Team`]);
+    }
+
+    function loadBracketMatch(match) {
+      if (!isKnockout(match)) return match;
+      const bracket = bracketMatches[String(match.id)] || bracketMatches[`match_${match.id}`];
+      if (!bracket) return match;
+      return {
+        ...match,
+        date: bracket.date || match.date,
+        bracketStatus: bracket.status,
+        status: bracket.status || match.status,
+        homeTeam: sideLabel(match, bracket, "home"),
+        awayTeam: sideLabel(match, bracket, "away"),
+        homeSource: bracket.homeSource,
+        awaySource: bracket.awaySource,
+        homeResolved: bracket.homeResolved,
+        awayResolved: bracket.awayResolved,
+        hasBracketMatch: true
+      };
+    }
+
+    function applyBracketMatches() {
+      if (!matchesData?.knockoutMatches) return;
+      matchesData = {
+        ...matchesData,
+        knockoutMatches: matchesData.knockoutMatches.map(loadBracketMatch)
+      };
+    }
+
+    function isMatchGuessable(match) {
+      if (!isKnockout(match)) return true;
+      if (match.hasBracketMatch) {
+        return match.bracketStatus === "defined"
+          && isSideResolved(match, "home")
+          && isSideResolved(match, "away");
+      }
+      return hasResolvedTeam(match.homeTeam) && hasResolvedTeam(match.awayTeam);
     }
 
     function formatDayLabel(dayKey) {
@@ -187,6 +266,7 @@
       const matches = getMatchesForDay(currentDay);
       const locked = isDayLocked(matchesData, currentDay);
       const countdown = getLockCountdown(currentDay);
+      const hasGuessableMatches = matches.some(isMatchGuessable);
       let html = "";
 
       if (countdown) {
@@ -198,6 +278,8 @@
 
       if (locked) {
         html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(212,57,28,0.15);border-radius:8px;color:var(--accent-red);font-weight:600;">🔒 Palpites travados para este dia</div>`;
+      } else if (!hasGuessableMatches) {
+        html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(240,192,64,0.12);border-radius:8px;color:var(--gold);font-weight:600;">Confrontos de mata-mata aguardando definição</div>`;
       } else {
         html += `<div style="text-align:center;margin-bottom:16px;padding:12px;background:rgba(46,204,113,0.1);border-radius:8px;color:var(--success);font-weight:600;">✅ Palpites abertos — preencha e salve!</div>`;
       }
@@ -208,8 +290,9 @@
         const homeVal = existing ? existing.homeScore : '';
         const awayVal = existing ? existing.awayScore : '';
         const roundLabel = m.round ? `R${m.round}` : '';
+        const disabled = locked || !isMatchGuessable(m);
 
-        html += `<div class="card match-card ${locked ? 'match-locked' : ''} ${existing ? 'match-has-guess' : ''} animate-fade-in">
+        html += `<div class="card match-card ${disabled ? 'match-locked' : ''} ${existing ? 'match-has-guess' : ''} animate-fade-in">
           <div class="match-header">
             <span class="match-group-badge">${escapeHtml(`${groupLabel} ${roundLabel}`.trim())}</span>
             <span style="color:var(--text-tertiary);font-size:12px;">${escapeHtml(formatDate(m.date))}</span>
@@ -220,9 +303,9 @@
               <div class="team-name">${escapeHtml(m.homeTeam)}</div>
             </div>
             <div class="score-input" data-match-id="${m.id}">
-              <input type="number" min="0" max="30" value="${escapeHtml(homeVal)}" placeholder="-" ${locked ? 'disabled' : ''} class="home-score" data-match="${m.id}">
+              <input type="number" min="0" max="30" value="${escapeHtml(homeVal)}" placeholder="-" ${disabled ? 'disabled' : ''} class="home-score" data-match="${m.id}">
               <span class="vs">x</span>
-              <input type="number" min="0" max="30" value="${escapeHtml(awayVal)}" placeholder="-" ${locked ? 'disabled' : ''} class="away-score" data-match="${m.id}">
+              <input type="number" min="0" max="30" value="${escapeHtml(awayVal)}" placeholder="-" ${disabled ? 'disabled' : ''} class="away-score" data-match="${m.id}">
             </div>
             <div style="flex:1;text-align:center;">
               <div class="team-name">${escapeHtml(m.awayTeam)}</div>
@@ -231,7 +314,7 @@
         </div>`;
       });
 
-      if (!locked && matches.length > 0) {
+      if (!locked && hasGuessableMatches) {
         html += `<div style="text-align:center;margin-top:24px;">
           <button class="btn btn-primary" id="btn-save-all">Salvar Palpites</button>
           ${Object.keys(userGuesses).length > 0 ? ' <button class="btn btn-secondary" id="btn-clear-guesses" style="margin-left:8px;">Limpar Palpites deste Dia</button>' : ''}
@@ -240,7 +323,7 @@
 
       container.innerHTML = html;
 
-      if (!locked && matches.length > 0) {
+      if (!locked && hasGuessableMatches) {
         const saveBtn = document.getElementById("btn-save-all");
         if (saveBtn) saveBtn.addEventListener("click", handleSaveAll);
         const clearBtn = document.getElementById("btn-clear-guesses");
@@ -267,6 +350,7 @@
       let hasInvalid = false;
 
       matches.forEach(m => {
+        if (!isMatchGuessable(m)) return;
         const homeInput = document.querySelector(`.home-score[data-match="${m.id}"]`);
         const awayInput = document.querySelector(`.away-score[data-match="${m.id}"]`);
         if (homeInput && awayInput) {

@@ -1,0 +1,610 @@
+# PRD - Atualizacao Mata-Mata Copa 2026
+
+**Data:** 2026-06-26  
+**Projeto:** Bolao Quinta Categoria Show - Copa do Mundo 2026  
+**Status:** Proposto para implementacao incremental  
+**Fonte principal de regras:** `copa_2026_resultados_regras_cruzamentos_ate_2026-06-26.md`  
+
+---
+
+## 1. Diagnostico do Projeto Atual
+
+O projeto atual e um aplicativo estatico em HTML, CSS e JavaScript vanilla, publicado no GitHub Pages e conectado ao Firebase Auth e Cloud Firestore. Ele ja permite login, primeiro acesso, cadastro de perfil, upload de foto em base64, registro de palpites, lancamento de resultados, ranking, historico e painel administrativo.
+
+O arquivo `data/matches.json` contem 104 jogos: 72 da fase de grupos e 32 de mata-mata. A fase de grupos possui grupos, rodadas, times, datas e horarios. Os 32 jogos de mata-mata ainda estao com `homeTeam: "TBD"` e `awayTeam: "TBD"`, portanto ainda nao podem receber palpites reais por confronto sem atualizacao.
+
+O Firestore usa as seguintes colecoes principais:
+
+- `users`: perfis dos participantes.
+- `guesses`: palpites, com documentos no formato `{uid}_match_{matchId}`.
+- `matches`: resultados oficiais, manuais ou vindos da integracao historica do SofaScore.
+- `locks`: travas por dia.
+- `matchLocks`: travas canonicas por jogo usadas pelas regras de seguranca.
+- `logs`: auditoria administrativa.
+
+As regras atuais de seguranca ja validam perfil, placares, dono do palpite e trava por jogo. A regra autoritativa para salvar palpite depende de `matchLocks/{matchId}`, com `dayKey` e `lockAt` correspondentes.
+
+## 2. O Que o Sistema Ja Faz
+
+- Autentica usuarios via Firebase Auth.
+- Redireciona perfis incompletos para primeiro acesso.
+- Permite foto de perfil compactada em base64 no Firestore.
+- Exibe jogos por dia na pagina de palpites.
+- Permite criar, alterar e limpar palpites enquanto o dia ainda esta aberto.
+- Bloqueia palpites 30 minutos antes do primeiro jogo do dia.
+- Reforca o bloqueio no Firestore por meio de `matchLocks`.
+- Calcula pontuacao do bolao:
+  - placar exato: `+7`;
+  - resultado correto: `+3`;
+  - resultado errado: `-1`.
+- Exibe ranking geral, historico pessoal e resultados oficiais.
+- Permite o AdminSuper inserir/corrigir resultados manualmente.
+- Permite sincronizar travas a partir do `matches.json`.
+- Permite gerenciar usuarios, migrar e-mail, remover participante e exportar CSV.
+- Mantem modulo de SofaScore, com fallback de CORS e preservacao de resultado manual.
+
+## 3. O Que Deve Ser Preservado
+
+- Nenhum palpite existente deve ser removido.
+- Nenhum resultado existente deve ser apagado automaticamente.
+- A regra de pontuacao do bolao deve permanecer exatamente igual.
+- O formato de documento dos palpites deve continuar compativel com `{uid}_match_{matchId}`.
+- O fluxo de login, primeiro acesso, perfil, ranking, historico, resultados e admin deve continuar funcionando.
+- `firestore.rules` deve continuar protegendo `guesses` por dono e trava.
+- O modulo `js/sofascore.js` deve permanecer no projeto, mas nao deve ser fonte ativa do fluxo principal nesta atualizacao.
+- A insercao manual de resultados deve continuar tendo prioridade operacional.
+
+## 4. Limitacoes Atuais
+
+- `data/matches.json` ainda nao contem os confrontos reais do mata-mata.
+- A classificacao dos grupos nao e calculada pelo sistema; ela precisa ser derivada dos resultados.
+- O sistema nao calcula melhores terceiros colocados.
+- O sistema nao possui modelo explicito para origem de vagas, por exemplo `1A`, `2B`, `3C`, `W73`, `L101`.
+- O painel admin nao possui tela para revisar classificacao, classificados, melhores terceiros ou bracket.
+- A logica atual de resultados e pontuacao e suficiente para o bolao, mas nao para montar automaticamente a competicao.
+- A API SofaScore nao deve ser usada como fonte ativa neste momento.
+- O arquivo Markdown de resultados e regras e uma referencia documental, nao uma fonte estruturada pronta para leitura automatica confiavel.
+
+## 5. Objetivo da Atualizacao
+
+Preparar o sistema para sair da fase de grupos e entrar no mata-mata, calculando automaticamente:
+
+- classificacao final de cada grupo;
+- classificados diretos: 12 primeiros e 12 segundos;
+- ranking dos 12 terceiros colocados;
+- 8 melhores terceiros classificados;
+- preenchimento possivel da fase de 32;
+- propagacao de vencedores para oitavas, quartas, semifinais, terceiro lugar e final.
+
+O sistema deve manter pendentes todos os confrontos que dependam de jogos sem resultado ou de combinacoes ainda indefinidas. O AdminSuper deve poder corrigir manualmente resultados, classificacoes, confrontos, horarios e vencedores.
+
+## 6. Regras Oficiais de Classificacao da Fase de Grupos
+
+Cada grupo possui 4 selecoes. Cada selecao joga uma vez contra cada adversario do grupo.
+
+### 6.1 Pontuacao da Competicao
+
+- Vitoria: 3 pontos.
+- Empate: 1 ponto.
+- Derrota: 0 ponto.
+
+### 6.2 Estatisticas por Selecao
+
+Para cada selecao, o sistema deve calcular:
+
+- `played`: jogos disputados;
+- `wins`: vitorias;
+- `draws`: empates;
+- `losses`: derrotas;
+- `goalsFor`: gols pro;
+- `goalsAgainst`: gols contra;
+- `goalDifference`: saldo de gols;
+- `points`: pontos;
+- `groupPosition`: posicao no grupo;
+- `groupComplete`: se todos os jogos do grupo possuem resultado oficial completo.
+
+### 6.3 Criterios de Desempate Dentro do Grupo
+
+Conforme o arquivo de regras enviado, quando duas ou mais selecoes terminam empatadas em pontos no mesmo grupo, a ordem e:
+
+1. Maior numero de pontos nos confrontos diretos entre as selecoes empatadas.
+2. Melhor saldo de gols nos confrontos diretos entre as selecoes empatadas.
+3. Maior numero de gols marcados nos confrontos diretos entre as selecoes empatadas.
+4. Se ainda houver empate, reaplicar os criterios de confronto direto apenas entre as selecoes que permanecerem empatadas, quando couber.
+5. Melhor saldo de gols em todos os jogos do grupo.
+6. Maior numero de gols marcados em todos os jogos do grupo.
+7. Melhor pontuacao de conduta da equipe.
+8. Melhor posicao no Ranking Mundial Masculino FIFA/Coca-Cola mais recente.
+9. Ranking FIFA imediatamente anterior, sucessivamente, se ainda necessario.
+
+### 6.4 Dados de Desempate que o Sistema Nao Tem Hoje
+
+O projeto atual nao armazena:
+
+- cartoes;
+- pontuacao de conduta;
+- ranking FIFA atual;
+- historico de rankings FIFA anteriores.
+
+Por isso, a implementacao deve separar:
+
+- classificacao automatica deterministica com dados disponiveis;
+- estado `needsManualTiebreak` quando o empate exigir conduta/ranking FIFA;
+- override manual pelo AdminSuper para fechar posicoes se necessario.
+
+## 7. Melhores Terceiros Colocados
+
+A Copa de 2026 classifica os 12 primeiros, os 12 segundos e os 8 melhores terceiros.
+
+O sistema deve criar uma lista com os terceiros colocados dos 12 grupos e ordenar por:
+
+1. Maior numero de pontos.
+2. Melhor saldo de gols.
+3. Maior numero de gols marcados.
+4. Melhor pontuacao de conduta.
+5. Melhor posicao no Ranking FIFA/Coca-Cola mais recente.
+6. Ranking FIFA anterior, sucessivamente, se ainda necessario.
+
+Se os criterios automaticos nao resolverem um empate por falta de dados, o sistema deve marcar esses terceiros como `needsManualTiebreak` e permitir correcao manual.
+
+Cada terceiro colocado deve conter:
+
+- grupo;
+- selecao;
+- pontos;
+- gols pro;
+- gols contra;
+- saldo;
+- posicao provisoria;
+- `qualifiedAsThird`: verdadeiro/falso;
+- `manualOverride`: verdadeiro/falso;
+- observacao administrativa opcional.
+
+## 8. Calculo da Classificacao Final de Cada Grupo
+
+O sistema deve:
+
+1. Carregar os jogos do grupo a partir de `data/matches.json`.
+2. Carregar resultados oficiais a partir da collection `matches`.
+3. Ignorar jogos sem resultado completo.
+4. Atualizar estatisticas de cada selecao com base nos resultados.
+5. Marcar o grupo como incompleto se qualquer jogo do grupo estiver sem resultado.
+6. Ordenar selecoes pelos criterios oficiais aplicaveis.
+7. Marcar empates que dependam de dados externos como `needsManualTiebreak`.
+8. Aplicar overrides manuais, se existirem.
+9. Persistir snapshots de classificacao para auditoria e exibicao administrativa.
+
+O sistema nao deve inventar resultado ou fechar classificacao definitiva de grupo incompleto.
+
+## 9. Preenchimento Automatico da Fase de 32
+
+Os jogos da fase de 32 sao `M73` a `M88`, correspondendo aos `matchId` 73 a 88.
+
+Estrutura prevista:
+
+| Jogo | Lado A | Lado B | Proximo |
+|---|---|---|---|
+| M73 | 2A | 2B | W73 -> M90 |
+| M74 | 1E | melhor 3o de A/B/C/D/F | W74 -> M89 |
+| M75 | 1F | 2C | W75 -> M90 |
+| M76 | 1C | 2F | W76 -> M91 |
+| M77 | 1I | melhor 3o de C/D/F/G/H | W77 -> M89 |
+| M78 | 2E | 2I | W78 -> M91 |
+| M79 | 1A | melhor 3o de C/E/F/H/I | W79 -> M92 |
+| M80 | 1L | melhor 3o de E/H/I/J/K | W80 -> M92 |
+| M81 | 1D | melhor 3o de B/E/F/I/J | W81 -> M94 |
+| M82 | 1G | melhor 3o de A/E/H/I/J | W82 -> M94 |
+| M83 | 2K | 2L | W83 -> M93 |
+| M84 | 1H | 2J | W84 -> M93 |
+| M85 | 1B | melhor 3o de E/F/G/I/J | W85 -> M96 |
+| M86 | 1J | 2H | W86 -> M95 |
+| M87 | 1K | melhor 3o de D/E/I/J/L | W87 -> M96 |
+| M88 | 2D | 2G | W88 -> M95 |
+
+### 9.1 Terceiros Dependentes de Combinacao
+
+Os slots de terceiros nao sao preenchidos apenas escolhendo qualquer terceiro elegivel dentro da lista. Eles dependem da combinacao final dos 8 grupos que classificaram terceiros.
+
+A implementacao deve conter uma tabela explicita de alocacao oficial de terceiros por combinacao. Caso essa tabela ainda nao esteja codificada ou a combinacao nao esteja resolvida, o slot deve permanecer pendente com origem textual, por exemplo:
+
+```text
+melhor 3o de A/B/C/D/F
+```
+
+Nao e permitido preencher adversario de terceiro colocado por heuristica nao oficial.
+
+## 10. Atualizacao dos Cruzamentos das Fases Seguintes
+
+O sistema deve modelar um bracket com origens e destinos.
+
+### 10.1 Fase de 32 para Oitavas
+
+- M89: W74 x W77.
+- M90: W73 x W75.
+- M91: W76 x W78.
+- M92: W79 x W80.
+- M93: W83 x W84.
+- M94: W81 x W82.
+- M95: W86 x W88.
+- M96: W85 x W87.
+
+### 10.2 Oitavas para Quartas
+
+- M97: W89 x W90.
+- M98: W93 x W94.
+- M99: W91 x W92.
+- M100: W95 x W96.
+
+### 10.3 Quartas para Semifinais
+
+- M101: W97 x W98.
+- M102: W99 x W100.
+
+### 10.4 Semifinais para Terceiro Lugar e Final
+
+- M103: L101 x L102.
+- M104: W101 x W102.
+
+### 10.5 Vencedores
+
+Para jogos eliminatorios, o sistema deve registrar:
+
+- placar oficial;
+- vencedor;
+- perdedor, quando necessario;
+- se houve prorrogação ou penaltis, caso o projeto passe a registrar essa informacao;
+- status do jogo.
+
+Enquanto o projeto registrar apenas placar simples, o AdminSuper deve poder escolher manualmente o vencedor em jogos empatados de mata-mata. Isso evita tratar empate como vencedor indefinido quando houver penaltis.
+
+## 11. Jogos Sem Resultado
+
+Se um jogo nao tiver resultado oficial completo:
+
+- nao deve alterar estatisticas definitivas;
+- nao deve fechar grupo;
+- nao deve definir classificados finais;
+- nao deve preencher confronto dependente dele;
+- deve aparecer como pendente no painel admin.
+
+Um resultado completo exige:
+
+- `homeScore` inteiro de 0 a 30;
+- `awayScore` inteiro de 0 a 30;
+- `status: "finished"` ou equivalente;
+- `matchId` conhecido quando for jogo da tabela local.
+
+## 12. Confrontos Indefinidos
+
+Um confronto deve poder existir parcialmente definido.
+
+Exemplos:
+
+- `Brasil x TBD`
+- `1I x melhor 3o de C/D/F/G/H`
+- `W74 x W77`
+
+Estados recomendados:
+
+- `pending`: depende de resultados/classificacao.
+- `partially_defined`: apenas um lado definido.
+- `defined`: dois lados definidos.
+- `in_progress`: jogo em andamento, se esse estado for usado futuramente.
+- `finished`: resultado final registrado.
+- `manual_corrected`: algum campo principal foi corrigido manualmente.
+
+## 13. Edicao Manual e Prioridade
+
+O AdminSuper deve poder corrigir manualmente:
+
+- resultado oficial;
+- posicao de grupo;
+- lista de classificados;
+- ordem dos melhores terceiros;
+- time de qualquer lado de confronto;
+- data e horario;
+- vencedor/perdedor de jogo eliminatorio;
+- observacoes.
+
+Quando um campo tiver `manualOverride: true`, o recalculo automatico nao deve sobrescrever esse campo sem confirmacao explicita.
+
+Toda alteracao manual deve registrar:
+
+- entidade alterada;
+- campo alterado;
+- valor anterior;
+- valor novo;
+- e-mail do admin;
+- data e hora;
+- justificativa opcional.
+
+Esses registros podem usar a collection `logs` existente, mas mudancas de bracket mais complexas devem ter collection propria de auditoria para facilitar revisao.
+
+## 14. Modelo de Dados Sugerido
+
+### 14.1 `matches`
+
+Continuar usando para resultados oficiais, mantendo compatibilidade:
+
+```json
+{
+  "matchId": 73,
+  "homeTeam": "Africa do Sul",
+  "awayTeam": "Canada",
+  "homeScore": 1,
+  "awayScore": 0,
+  "status": "finished",
+  "manualEntry": true,
+  "winner": "Africa do Sul",
+  "loser": "Canada",
+  "stage": "round-of-32",
+  "updatedAt": "2026-06-28T20:00:00.000Z"
+}
+```
+
+### 14.2 `standings/{group}`
+
+Snapshot calculado ou corrigido:
+
+```json
+{
+  "group": "A",
+  "complete": true,
+  "generatedAt": "2026-06-27T23:30:00.000Z",
+  "manualOverride": false,
+  "teams": [
+    {
+      "team": "Mexico",
+      "position": 1,
+      "played": 3,
+      "wins": 3,
+      "draws": 0,
+      "losses": 0,
+      "goalsFor": 6,
+      "goalsAgainst": 0,
+      "goalDifference": 6,
+      "points": 9,
+      "needsManualTiebreak": false
+    }
+  ]
+}
+```
+
+### 14.3 `thirdPlaceRanking/current`
+
+```json
+{
+  "complete": true,
+  "generatedAt": "2026-06-27T23:40:00.000Z",
+  "manualOverride": false,
+  "teams": [
+    {
+      "rank": 1,
+      "group": "F",
+      "team": "Suecia",
+      "points": 4,
+      "goalDifference": 0,
+      "goalsFor": 7,
+      "qualified": true,
+      "needsManualTiebreak": false
+    }
+  ]
+}
+```
+
+### 14.4 `bracketMatches/{matchId}`
+
+Fonte estruturada para confrontos eliminatorios:
+
+```json
+{
+  "matchId": 73,
+  "code": "M73",
+  "stage": "round-of-32",
+  "date": "2026-06-28T16:00:00-03:00",
+  "homeTeam": "Africa do Sul",
+  "awayTeam": "Canada",
+  "homeSource": "2A",
+  "awaySource": "2B",
+  "homeResolved": true,
+  "awayResolved": true,
+  "status": "defined",
+  "nextMatchId": 90,
+  "nextSlot": "home",
+  "winner": null,
+  "loser": null,
+  "manualOverride": false,
+  "notes": ""
+}
+```
+
+### 14.5 `manualOverrides/{id}`
+
+```json
+{
+  "entityType": "bracketMatch",
+  "entityId": "73",
+  "field": "homeTeam",
+  "previousValue": "TBD",
+  "newValue": "Africa do Sul",
+  "adminEmail": "admin@bolao.com",
+  "reason": "Ajuste conforme classificacao oficial",
+  "createdAt": "2026-06-27T23:50:00.000Z"
+}
+```
+
+## 15. Alteracoes Necessarias no Banco de Dados
+
+Nao ha migration obrigatoria no sentido tradicional, porque Firestore e schemaless. Ainda assim, ha necessidade de criar novas collections ou documentos:
+
+- `standings/{group}` para classificacao calculada.
+- `thirdPlaceRanking/current` para melhores terceiros.
+- `bracketMatches/{matchId}` para bracket estruturado.
+- `manualOverrides/{id}` para auditoria de correcoes manuais.
+
+Tambem sera necessario atualizar `firestore.rules` para permitir:
+
+- leitura autenticada dessas novas collections;
+- escrita apenas pelo AdminSuper;
+- opcionalmente escrita restrita por funcoes futuras, se o projeto passar a usar backend privilegiado.
+
+## 16. Alteracoes Necessarias no Backend
+
+O projeto nao possui backend proprio. A camada "backend" e o Firestore mais as regras de seguranca.
+
+Alteracoes necessarias:
+
+- novas regras em `firestore.rules`;
+- novas collections de dados;
+- funcoes JavaScript client-side para calcular classificacao e bracket;
+- persistencia dos snapshots pelo AdminSuper no painel.
+
+Nao sera criada Cloud Function nesta etapa, salvo decisao futura. Manter tudo em client-side admin preserva o custo zero e o padrao atual do projeto.
+
+## 17. Alteracoes Necessarias no Frontend
+
+Criar ou alterar:
+
+- modulo de regras da competicao;
+- modulo de classificacao;
+- modulo de bracket;
+- tela ou aba admin para revisar classificacao e mata-mata;
+- exibicao de confrontos indefinidos/definidos na pagina de resultados;
+- tela de palpites para usar nomes atualizados dos confrontos quando o mata-mata for definido;
+- sincronizacao de `locks` e `matchLocks` apos alteracao de datas ou confrontos.
+
+## 18. Alteracoes Necessarias no Painel Administrativo
+
+Adicionar ao painel Admin:
+
+- botao "Recalcular Classificacao";
+- visualizacao dos grupos com status completo/incompleto;
+- visualizacao dos melhores terceiros;
+- indicador `needsManualTiebreak`;
+- botao "Gerar/Atualizar Mata-Mata";
+- editor de confronto;
+- editor de data/hora;
+- seletor de vencedor para jogo eliminatorio empatado;
+- historico de overrides;
+- botao "Recalcular preservando correcoes manuais".
+
+## 19. Estrategia para Reaproveitar o Que Ja Existe
+
+Reaproveitar:
+
+- `data/matches.json` como tabela base de jogos.
+- `matches` como fonte de resultados oficiais.
+- `js/scoring.js` apenas para pontuacao do bolao, sem misturar com classificacao da Copa.
+- `js/matches.js` para datas, dias e travas.
+- `admin.html` para a operacao administrativa.
+- `firestore.rules` e padrao de AdminSuper.
+- `logs` para auditoria simples.
+- `buildResultLookup()` para localizar resultados por `matchId`.
+
+Separar:
+
+- pontuacao do bolao (`+7/+3/-1`);
+- pontuacao da Copa (`3/1/0`).
+
+Essas duas regras nao podem ficar no mesmo conceito.
+
+## 20. Estrategia para Nao Usar SofaScore
+
+Nesta atualizacao:
+
+- nao chamar `syncAllResults()` no fluxo principal;
+- manter o botao existente apenas como recurso legado ou desabilitado visualmente com aviso;
+- adicionar flag de configuracao client-side, por exemplo `ENABLE_SOFASCORE_SYNC = false`;
+- manter `js/sofascore.js` no repositorio para historico e compatibilidade;
+- usar apenas resultados manuais em `matches` e o arquivo Markdown como referencia humana.
+
+## 21. Criterios de Aceite
+
+A atualizacao sera aceita se:
+
+- fase de grupos continuar funcionando.
+- palpites existentes permanecerem intactos.
+- resultados existentes permanecerem intactos.
+- ranking do bolao continuar calculando com `+7/+3/-1`.
+- classificacao dos grupos for calculada com `3/1/0`.
+- grupos incompletos permanecerem incompletos.
+- melhores terceiros forem calculados quando houver dados suficientes.
+- empates sem dados de conduta/ranking forem marcados para revisao manual.
+- fase de 32 for preenchida apenas quando os classificados e combinacoes permitirem.
+- confrontos indefinidos permanecerem pendentes.
+- vencedores avancem automaticamente nas fases eliminatorias.
+- empates em mata-mata permitam escolha manual de vencedor.
+- AdminSuper consiga corrigir manualmente resultados, classificados e confrontos.
+- toda correcao manual gere log/auditoria.
+- datas e horarios sejam exibidos no horario local do Brasil.
+- SofaScore permaneça no projeto, mas fora do fluxo principal.
+- haja testes ou casos de teste documentados para classificacao, terceiros, bracket e overrides.
+
+## 22. Plano de Testes
+
+### 22.1 Classificacao de Grupo
+
+- grupo completo sem empate;
+- grupo completo com empate resolvido por confronto direto;
+- grupo completo com empate resolvido por saldo geral;
+- grupo completo com empate que exige conduta/ranking FIFA;
+- grupo incompleto com jogos pendentes;
+- resultado corrigido manualmente recalculando tabela.
+
+### 22.2 Melhores Terceiros
+
+- 12 terceiros com ranking claro;
+- empate por pontos resolvido por saldo;
+- empate por saldo resolvido por gols pro;
+- empate que exige criterio manual;
+- grupo incompleto impedindo fechamento definitivo.
+
+### 22.3 Bracket
+
+- preencher slots fixos como `2A x 2B`;
+- manter pendente slot de terceiro sem combinacao resolvida;
+- preencher terceiro quando combinacao oficial estiver disponivel;
+- nao sobrescrever confronto com override manual;
+- atualizar `matchLocks` quando data/hora mudar.
+
+### 22.4 Eliminatorias
+
+- vencedor normal avanca para proximo jogo;
+- perdedores das semifinais vao para terceiro lugar;
+- vencedores das semifinais vao para final;
+- jogo empatado exige vencedor manual;
+- correcao de vencedor recalcula fases seguintes sem apagar overrides.
+
+### 22.5 Regressao
+
+- login;
+- primeiro acesso;
+- salvar palpite aberto;
+- bloquear palpite travado;
+- ranking do bolao;
+- historico;
+- resultado manual;
+- exportacao CSV;
+- remocao/migracao de usuario.
+
+## 23. Riscos
+
+- Cruzamentos de terceiros classificados dependem de tabela oficial de combinacoes; sem essa tabela, nao preencher automaticamente esses slots.
+- Criterios de conduta e ranking FIFA exigem dados que o projeto nao armazena.
+- Alterar `matches.json` muda base de palpites do mata-mata; e preciso sincronizar `matchLocks` imediatamente depois.
+- Jogos de mata-mata empatados nao tem vencedor dedutivel apenas pelo placar simples.
+- Como tudo roda no client-side admin, calculos dependem do AdminSuper executar a acao de recalculo/publicacao no painel.
+- `firestore-rules.txt` esta defasado e nao deve ser usado como fonte de deploy.
+
+## 24. Proximos Passos de Implementacao
+
+1. Criar modulos puros de classificacao e bracket, sem Firebase.
+2. Criar fixtures/testes locais baseados no arquivo Markdown.
+3. Adicionar colecoes e regras Firestore para `standings`, `thirdPlaceRanking`, `bracketMatches` e `manualOverrides`.
+4. Adicionar tela admin de revisao da classificacao.
+5. Adicionar tela admin de revisao/edicao do bracket.
+6. Integrar atualizacao de `data/matches.json` ou leitura preferencial de `bracketMatches`.
+7. Desativar SofaScore no fluxo principal por flag.
+8. Rodar testes de regressao da fase de grupos.
+9. Publicar e sincronizar travas.
+

@@ -132,6 +132,25 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /standings/{group} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /thirdPlaceRanking/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /bracketMatches/{matchId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /manualOverrides/{overrideId} {
+      allow read, write: if isAdmin();
+    }
+
     match /config/{docId} {
       allow read: if signedIn();
       allow write: if isAdmin();
