@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel Admin - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=9">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -216,14 +216,43 @@
     </div>
   </div>
 
+  <!-- Edit Result Modal -->
+  <div class="modal-overlay" id="edit-result-modal" style="display:none;">
+    <div class="modal-content">
+      <h3>Editar Resultado</h3>
+      <input type="hidden" id="edit-result-id">
+      <input type="hidden" id="edit-result-matchid">
+      <div style="margin-bottom:16px;">
+        <label id="edit-result-home-label" style="font-weight:600;"></label>
+        <span style="margin:0 12px;font-size:18px;">x</span>
+        <label id="edit-result-away-label" style="font-weight:600;"></label>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div class="form-group" style="flex:1;">
+          <label>Mandante</label>
+          <input type="number" id="edit-result-home-score" min="0" max="30" placeholder="0">
+        </div>
+        <span style="font-size:20px;padding-top:24px;">x</span>
+        <div class="form-group" style="flex:1;">
+          <label>Visitante</label>
+          <input type="number" id="edit-result-away-score" min="0" max="30" placeholder="0">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-edit-result">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save-edit-result">Atualizar</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
-    import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=8";
+    import { app, auth, db, checkAuth, setupNavbar, showToast, isAdmin, escapeHtml } from "./js/auth.js?v=9";
     import { getDocs, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
     import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
     import { createUserWithEmailAndPassword, getAuth, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-    import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=8";
-    import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=8";
-    import { getDayKey, getDayLockInfo } from "./js/matches.js?v=8";
+    import { buildResultLookup, syncAllResults } from "./js/sofascore.js?v=9";
+    import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=9";
+    import { getDayKey, getDayLockInfo } from "./js/matches.js?v=9";
     import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=9";
     import { createBracketTemplate, resolveFixedSlots } from "./js/worldcup-bracket.js?v=9";
     import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
@@ -427,21 +456,58 @@
       };
     }
 
-    function populateMatchSelect() {
+    let manualMatchTeams = {};
+    let registeredMatchIds = new Set();
+
+    async function populateMatchSelect() {
       const select = document.getElementById("manual-match");
       select.innerHTML = '<option value="">Selecione um jogo...</option>';
       if (!allMatchesData) return;
+
+      const [resultSnap, bracketMatches] = await Promise.all([
+        getDocs(collection(db, "matches")),
+        loadBracketMatches(db)
+      ]);
+
+      registeredMatchIds = new Set();
+      resultSnap.forEach(d => {
+        const data = d.data();
+        const mid = data.matchId ?? d.id;
+        registeredMatchIds.add(Number(mid));
+        registeredMatchIds.add(String(mid));
+        registeredMatchIds.add(d.id);
+        if (data.sofaScoreId) {
+          registeredMatchIds.add(`sofa_${data.sofaScoreId}`);
+        }
+      });
+
+      manualMatchTeams = {};
+      const bracketById = new Map();
+      (bracketMatches || []).forEach(m => {
+        bracketById.set(Number(m.matchId ?? m.id), m);
+      });
+
+      const stage = { "round-of-32": "Fase 32", "round-of-16": "Oitavas", "quarterfinals": "Quartas", "semifinals": "Semi", "third-place": "3º Lugar", "final": "Final" };
+
       allMatchesData.groupMatches.forEach(m => {
+        if (registeredMatchIds.has(m.id) || registeredMatchIds.has(`match_${m.id}`)) return;
+        manualMatchTeams[m.id] = { homeTeam: m.homeTeam, awayTeam: m.awayTeam };
         const opt = document.createElement("option");
         opt.value = m.id;
         opt.textContent = `[Grupo ${m.group}] ${m.homeTeam} x ${m.awayTeam}`;
         select.appendChild(opt);
       });
+
       allMatchesData.knockoutMatches.forEach(m => {
+        if (registeredMatchIds.has(m.id) || registeredMatchIds.has(`match_${m.id}`)) return;
+        const bracket = bracketById.get(m.id);
+        const homeTeam = (bracket && bracket.homeTeam && bracket.homeTeam !== "TBD") ? bracket.homeTeam : m.homeTeam;
+        const awayTeam = (bracket && bracket.awayTeam && bracket.awayTeam !== "TBD") ? bracket.awayTeam : m.awayTeam;
+        if (homeTeam === "TBD" || awayTeam === "TBD") return;
+        manualMatchTeams[m.id] = { homeTeam, awayTeam };
         const opt = document.createElement("option");
         opt.value = m.id;
-        const stage = { "round-of-32": "Fase 32", "round-of-16": "Oitavas", "quarterfinals": "Quartas", "semifinals": "Semi", "third-place": "3º Lugar", "final": "Final" };
-        opt.textContent = `[${stage[m.stage] || m.stage}] ${m.homeTeam} x ${m.awayTeam}`;
+        opt.textContent = `[${stage[m.stage] || m.stage}] ${homeTeam} x ${awayTeam}`;
         select.appendChild(opt);
       });
     }
@@ -465,7 +531,10 @@
             <td>${escapeHtml(r.homeTeam)} x ${escapeHtml(r.awayTeam)}</td>
             <td class="score-font">${escapeHtml(r.homeScore)} x ${escapeHtml(r.awayScore)}</td>
             <td style="font-size:12px;color:var(--text-tertiary);">${escapeHtml(source)}</td>
-            <td><button class="btn btn-danger btn-sm" data-delete-match="${escapeHtml(r.id)}" style="padding:4px 10px;font-size:12px;">Excluir</button></td>
+            <td style="display:flex;gap:6px;">
+              <button class="btn btn-secondary btn-sm" data-edit-match="${escapeHtml(r.id)}" style="padding:4px 10px;font-size:12px;">Editar</button>
+              <button class="btn btn-danger btn-sm" data-delete-match="${escapeHtml(r.id)}" style="padding:4px 10px;font-size:12px;">Excluir</button>
+            </td>
           </tr>`;
         });
         html += '</tbody></table>';
@@ -478,7 +547,17 @@
               await addLog("RESULTADO EXCLUÍDO", `ID: ${btn.dataset.deleteMatch}`);
               showToast("Resultado excluído!", "success");
               loadResults();
+              populateMatchSelect();
             }
+          });
+        });
+
+        container.querySelectorAll("[data-edit-match]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const docId = btn.dataset.editMatch;
+            const result = results.find(r => r.id === docId);
+            if (!result) return;
+            openEditResultModal(result);
           });
         });
       } catch (e) {
@@ -1318,12 +1397,11 @@
     // Manual result
     document.getElementById("manual-match").addEventListener("change", (e) => {
       const matchId = parseInt(e.target.value);
-      if (!matchId || !allMatchesData) return;
-      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
-      const match = allMatches.find(m => m.id === matchId);
-      if (match) {
-        document.getElementById("manual-home-label").textContent = match.homeTeam;
-        document.getElementById("manual-away-label").textContent = match.awayTeam;
+      if (!matchId) return;
+      const teams = manualMatchTeams[matchId];
+      if (teams) {
+        document.getElementById("manual-home-label").textContent = teams.homeTeam;
+        document.getElementById("manual-away-label").textContent = teams.awayTeam;
       }
     });
 
@@ -1341,14 +1419,16 @@
         showToast("Use apenas placares inteiros entre 0 e 30.", "warning");
         return;
       }
-      const allMatches = [...allMatchesData.groupMatches, ...allMatchesData.knockoutMatches];
-      const match = allMatches.find(m => m.id === parseInt(matchId));
-      if (!match) return;
+      const teams = manualMatchTeams[parseInt(matchId)];
+      if (!teams) {
+        showToast("Jogo inválido.", "warning");
+        return;
+      }
       try {
         await setDoc(doc(db, "matches", `match_${matchId}`), {
           matchId: parseInt(matchId),
-          homeTeam: match.homeTeam,
-          awayTeam: match.awayTeam,
+          homeTeam: teams.homeTeam,
+          awayTeam: teams.awayTeam,
           homeScore: parsedHome,
           awayScore: parsedAway,
           status: "finished",
@@ -1356,12 +1436,69 @@
           updatedAt: new Date().toISOString()
         });
         showToast("Resultado salvo!", "success");
-        await addLog("RESULTADO MANUAL", `${match.homeTeam} ${homeScore} x ${awayScore} ${match.awayTeam}`);
+        await addLog("RESULTADO MANUAL", `${teams.homeTeam} ${homeScore} x ${awayScore} ${teams.awayTeam}`);
         document.getElementById("manual-home-score").value = "";
         document.getElementById("manual-away-score").value = "";
+        document.getElementById("manual-home-label").textContent = "Mandante";
+        document.getElementById("manual-away-label").textContent = "Visitante";
+        document.getElementById("manual-match").value = "";
         loadResults();
+        populateMatchSelect();
       } catch (e) {
         showToast("Erro ao salvar: " + e.message, "error");
+      }
+    });
+
+    function openEditResultModal(result) {
+      document.getElementById("edit-result-id").value = result.id;
+      document.getElementById("edit-result-matchid").value = result.matchId ?? "";
+      document.getElementById("edit-result-home-label").textContent = result.homeTeam || "Mandante";
+      document.getElementById("edit-result-away-label").textContent = result.awayTeam || "Visitante";
+      document.getElementById("edit-result-home-score").value = result.homeScore ?? "";
+      document.getElementById("edit-result-away-score").value = result.awayScore ?? "";
+      document.getElementById("edit-result-modal").style.display = "flex";
+    }
+
+    document.getElementById("btn-cancel-edit-result").addEventListener("click", () => {
+      document.getElementById("edit-result-modal").style.display = "none";
+    });
+
+    document.getElementById("btn-save-edit-result").addEventListener("click", async () => {
+      const docId = document.getElementById("edit-result-id").value;
+      const matchId = document.getElementById("edit-result-matchid").value;
+      const homeScore = document.getElementById("edit-result-home-score").value;
+      const awayScore = document.getElementById("edit-result-away-score").value;
+      if (homeScore === "" || awayScore === "") {
+        showToast("Preencha os dois placares.", "warning");
+        return;
+      }
+      const parsedHome = parseScoreInput(homeScore);
+      const parsedAway = parseScoreInput(awayScore);
+      if (parsedHome === null || parsedAway === null) {
+        showToast("Use placares inteiros entre 0 e 30.", "warning");
+        return;
+      }
+      const btn = document.getElementById("btn-save-edit-result");
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+      try {
+        await setDoc(doc(db, "matches", docId), {
+          homeScore: parsedHome,
+          awayScore: parsedAway,
+          status: "finished",
+          manualEntry: true,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        document.getElementById("edit-result-modal").style.display = "none";
+        showToast("Resultado atualizado!", "success");
+        await addLog("RESULTADO EDITADO", `${docId}: ${parsedHome} x ${parsedAway}`);
+        loadResults();
+        populateMatchSelect();
+      } catch (e) {
+        showToast("Erro ao atualizar: " + e.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Atualizar";
       }
     });
 
