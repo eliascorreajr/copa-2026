@@ -78,6 +78,49 @@
               <input type="number" id="manual-away-score" min="0" max="30" placeholder="0">
             </div>
           </div>
+
+          <div id="manual-knockout-extra" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--bg-tertiary);">
+            <h4 style="margin-bottom:8px;font-size:14px;">Avanço (mata-mata)</h4>
+            <p style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px;">Preencha só se o jogo foi para prorrogação ou pênaltis. Não afeta a pontuação do ranking (esta usa apenas os 90 minutos acima).</p>
+            <div class="form-group" id="manual-winner-wrap" style="display:none;">
+              <label>Quem avançou</label>
+              <div style="display:flex;gap:12px;">
+                <label style="display:flex;align-items:center;gap:6px;font-weight:normal;">
+                  <input type="radio" name="manual-winner" value="home">
+                  <span id="manual-winner-home-label">Mandante</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-weight:normal;">
+                  <input type="radio" name="manual-winner" value="away">
+                  <span id="manual-winner-away-label">Visitante</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Método</label>
+              <select id="manual-method" style="width:100%;">
+                <option value="">Não aplicável</option>
+                <option value="extra-time">Prorrogação</option>
+                <option value="penalties">Pênaltis</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Placar da prorrogação (opcional)</label>
+              <div style="display:flex;gap:12px;align-items:center;">
+                <input type="number" id="manual-extra-home" min="0" max="30" placeholder="0" style="flex:1;">
+                <span style="font-size:18px;">x</span>
+                <input type="number" id="manual-extra-away" min="0" max="30" placeholder="0" style="flex:1;">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Placar dos pênaltis (opcional)</label>
+              <div style="display:flex;gap:12px;align-items:center;">
+                <input type="number" id="manual-pen-home" min="0" max="50" placeholder="0" style="flex:1;">
+                <span style="font-size:18px;">x</span>
+                <input type="number" id="manual-pen-away" min="0" max="50" placeholder="0" style="flex:1;">
+              </div>
+            </div>
+          </div>
+
           <button class="btn btn-secondary" id="btn-manual-save" style="width:100%;margin-top:12px;">Salvar Resultado</button>
         </div>
       </div>
@@ -238,6 +281,49 @@
           <input type="number" id="edit-result-away-score" min="0" max="30" placeholder="0">
         </div>
       </div>
+
+      <div id="edit-result-knockout-extra" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--bg-tertiary);">
+        <h4 style="margin-bottom:8px;font-size:14px;">Avanço (mata-mata)</h4>
+        <p style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px;">Não afeta a pontuação do ranking (usa só os 90 minutos).</p>
+        <div class="form-group" id="edit-result-winner-wrap" style="display:none;">
+          <label>Quem avançou</label>
+          <div style="display:flex;gap:12px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;">
+              <input type="radio" name="edit-result-winner" value="home">
+              <span id="edit-result-winner-home-label">Mandante</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;">
+              <input type="radio" name="edit-result-winner" value="away">
+              <span id="edit-result-winner-away-label">Visitante</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Método</label>
+          <select id="edit-result-method" style="width:100%;">
+            <option value="">Não aplicável</option>
+            <option value="extra-time">Prorrogação</option>
+            <option value="penalties">Pênaltis</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Placar da prorrogação (opcional)</label>
+          <div style="display:flex;gap:12px;align-items:center;">
+            <input type="number" id="edit-result-extra-home" min="0" max="30" placeholder="0" style="flex:1;">
+            <span style="font-size:18px;">x</span>
+            <input type="number" id="edit-result-extra-away" min="0" max="30" placeholder="0" style="flex:1;">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Placar dos pênaltis (opcional)</label>
+          <div style="display:flex;gap:12px;align-items:center;">
+            <input type="number" id="edit-result-pen-home" min="0" max="50" placeholder="0" style="flex:1;">
+            <span style="font-size:18px;">x</span>
+            <input type="number" id="edit-result-pen-away" min="0" max="50" placeholder="0" style="flex:1;">
+          </div>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <button class="btn btn-secondary" id="btn-cancel-edit-result">Cancelar</button>
         <button class="btn btn-primary" id="btn-save-edit-result">Atualizar</button>
@@ -254,7 +340,7 @@
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=9";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=9";
     import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=9";
-    import { createBracketTemplate, resolveFixedSlots } from "./js/worldcup-bracket.js?v=9";
+    import { createBracketTemplate, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=9";
     import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
 
     const ENABLE_SOFASCORE_SYNC = false;
@@ -457,6 +543,7 @@
     }
 
     let manualMatchTeams = {};
+    let manualMatchMeta = {};
     let registeredMatchIds = new Set();
 
     async function populateMatchSelect() {
@@ -482,6 +569,7 @@
       });
 
       manualMatchTeams = {};
+      manualMatchMeta = {};
       const bracketById = new Map();
       (bracketMatches || []).forEach(m => {
         bracketById.set(Number(m.matchId ?? m.id), m);
@@ -492,6 +580,7 @@
       allMatchesData.groupMatches.forEach(m => {
         if (registeredMatchIds.has(m.id) || registeredMatchIds.has(`match_${m.id}`)) return;
         manualMatchTeams[m.id] = { homeTeam: m.homeTeam, awayTeam: m.awayTeam };
+        manualMatchMeta[m.id] = { homeTeam: m.homeTeam, awayTeam: m.awayTeam, isKnockout: false, stage: null };
         const opt = document.createElement("option");
         opt.value = m.id;
         opt.textContent = `[Grupo ${m.group}] ${m.homeTeam} x ${m.awayTeam}`;
@@ -505,6 +594,7 @@
         const awayTeam = (bracket && bracket.awayTeam && bracket.awayTeam !== "TBD") ? bracket.awayTeam : m.awayTeam;
         if (homeTeam === "TBD" || awayTeam === "TBD") return;
         manualMatchTeams[m.id] = { homeTeam, awayTeam };
+        manualMatchMeta[m.id] = { homeTeam, awayTeam, isKnockout: true, stage: m.stage };
         const opt = document.createElement("option");
         opt.value = m.id;
         opt.textContent = `[${stage[m.stage] || m.stage}] ${homeTeam} x ${awayTeam}`;
@@ -527,8 +617,11 @@
         let html = '<table class="ranking-table"><thead><tr><th>Jogo</th><th>Placar</th><th>Fonte</th><th>Ações</th></tr></thead><tbody>';
         results.forEach(r => {
           const source = r.manualEntry ? "Manual" : (r.sofaScoreId ? "SofaScore" : "Manual");
+          const advanceBadge = r.winner
+            ? ` <span style="font-size:11px;color:var(--accent-orange);">→ ${escapeHtml(r.winner === "home" ? r.homeTeam : r.awayTeam)}${r.winnerMethod ? ` (${r.winnerMethod === "extra-time" ? "prorr." : "pên."})` : ""}</span>`
+            : "";
           html += `<tr>
-            <td>${escapeHtml(r.homeTeam)} x ${escapeHtml(r.awayTeam)}</td>
+            <td>${escapeHtml(r.homeTeam)} x ${escapeHtml(r.awayTeam)}${advanceBadge}</td>
             <td class="score-font">${escapeHtml(r.homeScore)} x ${escapeHtml(r.awayScore)}</td>
             <td style="font-size:12px;color:var(--text-tertiary);">${escapeHtml(source)}</td>
             <td style="display:flex;gap:6px;">
@@ -1397,13 +1490,41 @@
     // Manual result
     document.getElementById("manual-match").addEventListener("change", (e) => {
       const matchId = parseInt(e.target.value);
-      if (!matchId) return;
+      const extraWrap = document.getElementById("manual-knockout-extra");
+      if (!matchId) {
+        if (extraWrap) extraWrap.style.display = "none";
+        document.getElementById("manual-home-label").textContent = "Mandante";
+        document.getElementById("manual-away-label").textContent = "Visitante";
+        return;
+      }
+      const meta = manualMatchMeta[matchId];
       const teams = manualMatchTeams[matchId];
       if (teams) {
         document.getElementById("manual-home-label").textContent = teams.homeTeam;
         document.getElementById("manual-away-label").textContent = teams.awayTeam;
       }
+      if (extraWrap) extraWrap.style.display = (meta && meta.isKnockout) ? "block" : "none";
+      if (meta && meta.isKnockout) {
+        document.getElementById("manual-winner-home-label").textContent = teams.homeTeam;
+        document.getElementById("manual-winner-away-label").textContent = teams.awayTeam;
+      }
+      const winnerWrap = document.getElementById("manual-winner-wrap");
+      if (winnerWrap) winnerWrap.style.display = "none";
+      const hs = document.getElementById("manual-home-score").value;
+      const as = document.getElementById("manual-away-score").value;
+      if (hs !== "" && as !== "" && Number(hs) === Number(as)) winnerWrap.style.display = "block";
     });
+
+    document.getElementById("manual-home-score").addEventListener("input", () => updateManualWinnerVisibility());
+    document.getElementById("manual-away-score").addEventListener("input", () => updateManualWinnerVisibility());
+
+    function updateManualWinnerVisibility() {
+      const hs = document.getElementById("manual-home-score").value;
+      const as = document.getElementById("manual-away-score").value;
+      const winnerWrap = document.getElementById("manual-winner-wrap");
+      if (!winnerWrap) return;
+      winnerWrap.style.display = (hs !== "" && as !== "" && Number(hs) === Number(as)) ? "block" : "none";
+    }
 
     document.getElementById("btn-manual-save").addEventListener("click", async () => {
       const matchId = document.getElementById("manual-match").value;
@@ -1419,13 +1540,48 @@
         showToast("Use apenas placares inteiros entre 0 e 30.", "warning");
         return;
       }
+      const meta = manualMatchMeta[parseInt(matchId)];
       const teams = manualMatchTeams[parseInt(matchId)];
       if (!teams) {
         showToast("Jogo inválido.", "warning");
         return;
       }
+
+      const isKnockout = meta && meta.isKnockout;
+      const isDraw = parsedHome === parsedAway;
+      let winner = null;
+      let winnerMethod = null;
+      let extraTimeHome = null;
+      let extraTimeAway = null;
+      let penaltiesHome = null;
+      let penaltiesAway = null;
+
+      if (isKnockout) {
+        winnerMethod = document.getElementById("manual-method").value || null;
+        const extraHomeRaw = document.getElementById("manual-extra-home").value;
+        const extraAwayRaw = document.getElementById("manual-extra-away").value;
+        const penHomeRaw = document.getElementById("manual-pen-home").value;
+        const penAwayRaw = document.getElementById("manual-pen-away").value;
+        if (extraHomeRaw !== "" || extraAwayRaw !== "") {
+          extraTimeHome = parseScoreInput(extraHomeRaw);
+          extraTimeAway = parseScoreInput(extraAwayRaw);
+        }
+        if (penHomeRaw !== "" || penAwayRaw !== "") {
+          penaltiesHome = parseScoreInput(penHomeRaw);
+          penaltiesAway = parseScoreInput(penAwayRaw);
+        }
+        if (isDraw) {
+          const winnerRadio = document.querySelector('input[name="manual-winner"]:checked');
+          if (!winnerRadio) {
+            showToast("Selecione quem avançou (jogo empatado nos 90 minutos).", "warning");
+            return;
+          }
+          winner = winnerRadio.value;
+        }
+      }
+
       try {
-        await setDoc(doc(db, "matches", `match_${matchId}`), {
+        const payload = {
           matchId: parseInt(matchId),
           homeTeam: teams.homeTeam,
           awayTeam: teams.awayTeam,
@@ -1434,20 +1590,65 @@
           status: "finished",
           manualEntry: true,
           updatedAt: new Date().toISOString()
-        });
+        };
+        if (isKnockout) {
+          if (winner) payload.winner = winner;
+          if (winnerMethod) payload.winnerMethod = winnerMethod;
+          if (extraTimeHome !== null) payload.extraTimeHome = extraTimeHome;
+          if (extraTimeAway !== null) payload.extraTimeAway = extraTimeAway;
+          if (penaltiesHome !== null) payload.penaltiesHome = penaltiesHome;
+          if (penaltiesAway !== null) payload.penaltiesAway = penaltiesAway;
+        }
+        await setDoc(doc(db, "matches", `match_${matchId}`), payload, { merge: true });
+
+        if (isKnockout) {
+          try {
+            await propagateKnockoutResult(parseInt(matchId), payload, winner);
+          } catch (propErr) {
+            console.warn("Erro ao propagar vencedor para bracket:", propErr);
+            showToast("Resultado salvo, mas falha ao propagar vencedor para o mata-mata.", "warning");
+          }
+        }
+
         showToast("Resultado salvo!", "success");
-        await addLog("RESULTADO MANUAL", `${teams.homeTeam} ${homeScore} x ${awayScore} ${teams.awayTeam}`);
+        const extraInfo = isKnockout && winner ? ` (avançou: ${winner === "home" ? teams.homeTeam : teams.awayTeam}${winnerMethod ? ` — ${winnerMethod === "extra-time" ? "prorrogação" : "pênaltis"}" : ""})` : "";
+        await addLog("RESULTADO MANUAL", `${teams.homeTeam} ${parsedHome} x ${parsedAway} ${teams.awayTeam}${extraInfo}`);
         document.getElementById("manual-home-score").value = "";
         document.getElementById("manual-away-score").value = "";
+        document.getElementById("manual-method").value = "";
+        document.getElementById("manual-extra-home").value = "";
+        document.getElementById("manual-extra-away").value = "";
+        document.getElementById("manual-pen-home").value = "";
+        document.getElementById("manual-pen-away").value = "";
+        document.querySelectorAll('input[name="manual-winner"]').forEach(r => r.checked = false);
         document.getElementById("manual-home-label").textContent = "Mandante";
         document.getElementById("manual-away-label").textContent = "Visitante";
         document.getElementById("manual-match").value = "";
+        const extraWrap = document.getElementById("manual-knockout-extra");
+        if (extraWrap) extraWrap.style.display = "none";
         loadResults();
         populateMatchSelect();
       } catch (e) {
         showToast("Erro ao salvar: " + e.message, "error");
       }
     });
+
+    async function propagateKnockoutResult(matchId, matchPayload, manualWinner) {
+      const existing = await loadBracketMatches(db);
+      const bracketIndex = existing.findIndex(m => Number(m.matchId ?? m.id) === matchId);
+      if (bracketIndex < 0) return;
+      const bracketMatch = existing[bracketIndex];
+      const resolved = {
+        ...bracketMatch,
+        matchId,
+        homeScore: matchPayload.homeScore,
+        awayScore: matchPayload.awayScore,
+        homeTeam: matchPayload.homeTeam,
+        awayTeam: matchPayload.awayTeam
+      };
+      const updated = propagateKnockoutWinner(existing, resolved, manualWinner);
+      await saveBracketMatches(db, updated);
+    }
 
     function openEditResultModal(result) {
       document.getElementById("edit-result-id").value = result.id;
@@ -1456,7 +1657,37 @@
       document.getElementById("edit-result-away-label").textContent = result.awayTeam || "Visitante";
       document.getElementById("edit-result-home-score").value = result.homeScore ?? "";
       document.getElementById("edit-result-away-score").value = result.awayScore ?? "";
+
+      const isKnockout = Number(result.matchId) >= 73 || (allMatchesData?.knockoutMatches || []).some(m => String(m.id) === String(result.matchId));
+      const extraWrap = document.getElementById("edit-result-knockout-extra");
+      if (extraWrap) extraWrap.style.display = isKnockout ? "block" : "none";
+      if (isKnockout) {
+        document.getElementById("edit-result-winner-home-label").textContent = result.homeTeam || "Mandante";
+        document.getElementById("edit-result-winner-away-label").textContent = result.awayTeam || "Visitante";
+      }
+
+      document.querySelectorAll('input[name="edit-result-winner"]').forEach(r => {
+        r.checked = (r.value === result.winner);
+      });
+      document.getElementById("edit-result-method").value = result.winnerMethod || "";
+      document.getElementById("edit-result-extra-home").value = result.extraTimeHome ?? "";
+      document.getElementById("edit-result-extra-away").value = result.extraTimeAway ?? "";
+      document.getElementById("edit-result-pen-home").value = result.penaltiesHome ?? "";
+      document.getElementById("edit-result-pen-away").value = result.penaltiesAway ?? "";
+      updateEditWinnerVisibility(result.homeScore, result.awayScore);
+
       document.getElementById("edit-result-modal").style.display = "flex";
+    }
+
+    document.getElementById("edit-result-home-score").addEventListener("input", () => updateEditWinnerVisibility());
+    document.getElementById("edit-result-away-score").addEventListener("input", () => updateEditWinnerVisibility());
+
+    function updateEditWinnerVisibility(homeOverride, awayOverride) {
+      const hs = homeOverride !== undefined ? homeOverride : document.getElementById("edit-result-home-score").value;
+      const as = awayOverride !== undefined ? awayOverride : document.getElementById("edit-result-away-score").value;
+      const winnerWrap = document.getElementById("edit-result-winner-wrap");
+      if (!winnerWrap) return;
+      winnerWrap.style.display = (hs !== "" && hs !== null && as !== "" && as !== null && Number(hs) === Number(as)) ? "block" : "none";
     }
 
     document.getElementById("btn-cancel-edit-result").addEventListener("click", () => {
@@ -1478,17 +1709,76 @@
         showToast("Use placares inteiros entre 0 e 30.", "warning");
         return;
       }
+
+      const isKnockout = Number(matchId) >= 73 || (allMatchesData?.knockoutMatches || []).some(m => String(m.id) === String(matchId));
+      const isDraw = parsedHome === parsedAway;
+      let winner = null;
+      let winnerMethod = null;
+      let extraTimeHome = null;
+      let extraTimeAway = null;
+      let penaltiesHome = null;
+      let penaltiesAway = null;
+
+      if (isKnockout) {
+        const winnerRadio = document.querySelector('input[name="edit-result-winner"]:checked');
+        if (isDraw && !winnerRadio) {
+          showToast("Selecione quem avançou (empate nos 90 minutos).", "warning");
+          return;
+        }
+        winner = winnerRadio ? winnerRadio.value : null;
+        winnerMethod = document.getElementById("edit-result-method").value || null;
+        const extraHomeRaw = document.getElementById("edit-result-extra-home").value;
+        const extraAwayRaw = document.getElementById("edit-result-extra-away").value;
+        const penHomeRaw = document.getElementById("edit-result-pen-home").value;
+        const penAwayRaw = document.getElementById("edit-result-pen-away").value;
+        if (extraHomeRaw !== "" || extraAwayRaw !== "") {
+          extraTimeHome = parseScoreInput(extraHomeRaw);
+          extraTimeAway = parseScoreInput(extraAwayRaw);
+        }
+        if (penHomeRaw !== "" || penAwayRaw !== "") {
+          penaltiesHome = parseScoreInput(penHomeRaw);
+          penaltiesAway = parseScoreInput(penAwayRaw);
+        }
+      }
+
       const btn = document.getElementById("btn-save-edit-result");
       btn.disabled = true;
       btn.textContent = "Salvando...";
       try {
-        await setDoc(doc(db, "matches", docId), {
+        const payload = {
           homeScore: parsedHome,
           awayScore: parsedAway,
           status: "finished",
           manualEntry: true,
           updatedAt: new Date().toISOString()
-        }, { merge: true });
+        };
+        if (isKnockout) {
+          payload.winner = winner || null;
+          payload.winnerMethod = winnerMethod;
+          payload.extraTimeHome = extraTimeHome;
+          payload.extraTimeAway = extraTimeAway;
+          payload.penaltiesHome = penaltiesHome;
+          payload.penaltiesAway = penaltiesAway;
+        }
+        await setDoc(doc(db, "matches", docId), payload, { merge: true });
+
+        if (isKnockout) {
+          try {
+            const resultSnap = await getDocs(collection(db, "matches"));
+            const stored = resultSnap.docs.map(d => d.data()).find(d => d.id === docId || (d.matchId && `match_${d.matchId}` === docId)) || { ...payload, homeTeam: document.getElementById("edit-result-home-label").textContent, awayTeam: document.getElementById("edit-result-away-label").textContent, matchId: Number(matchId) };
+            await propagateKnockoutResult(Number(matchId), {
+              matchId: Number(matchId),
+              homeTeam: stored.homeTeam,
+              awayTeam: stored.awayTeam,
+              homeScore: parsedHome,
+              awayScore: parsedAway
+            }, winner);
+          } catch (propErr) {
+            console.warn("Erro ao propagar vencedor:", propErr);
+            showToast("Resultado atualizado, mas falha ao propagar vencedor.", "warning");
+          }
+        }
+
         document.getElementById("edit-result-modal").style.display = "none";
         showToast("Resultado atualizado!", "success");
         await addLog("RESULTADO EDITADO", `${docId}: ${parsedHome} x ${parsedAway}`);

@@ -649,3 +649,25 @@ Implementado e deployado em 2026-06-26 (commit `0c3aac2`, merge `--ff` para `mai
 - Validar no navegador os horarios exibidos em `palpites.html` (Fase de 32) contra a programacao oficial.
 - Quando a FIFA divulgar horarios de M89-M104 (oitavas em diante), o AdminSuper edita cada confronto no modal e sincroniza travas; `data/matches.json` permanece intocado ate confirmacao oficial (conforme PRD secao 17 e plano Task 9).
 
+### 25.4 Avanço do mata-mata: prorrogação, pênaltis e quem avança (2026-06-26)
+
+**Regra confirmada:** a pontuação do bolão usa **apenas o placar ao fim dos 90 minutos** (em `js/scoring.js`). Prorrogação e pênaltis **não entram** para o ranking geral. O_ranking é _separado_ do _avanço_ da competição.
+
+**Implementado:**
+
+1. Campos extras em `matches/match_{matchId}` para confrontos de mata-mata:
+   - `winner`: `"home"` | `"away"` | `null` — selecionado manualmente quando o placar dos 90 min fica empatado.
+   - `winnerMethod`: `"extra-time"` (prorrogação) | `"penalties"` (pênaltis) | `null`.
+   - `extraTimeHome`, `extraTimeAway`: placar agregado da prorrogação (opcional).
+   - `penaltiesHome`, `penaltiesAway`: placar dos pênaltis (opcional).
+2. `admin.html`:
+   - **Inserir / Corrigir Resultado Manualmente**: quando o jogo selecionado é de mata-mata, exibe bloco "Avanço (mata-mata)" com rádio "Quem avançou" (Mandante/Visitante) — obrigatório quando o placar dos 90 min empata —, seletor de Método, placar da prorrogação e placar dos pênaltis.
+   - **Editar Resultado** (modal): mesmos campos extras, pré-preenchidos com os valores salvos.
+   - **Resultados Cadastrados**: cada linha mostra um badge `→ {seleção} (prorr.|pên.)` quando `winner` está definido.
+   - Ao salvar/editar resultado de mata-mata, chama `propagateKnockoutResult` que usa `propagateKnockoutWinner` (em `js/worldcup-bracket.js`) para marcar o jogo como `finished`, gravar `winner`/`loser` e preencher o slot do próximo confronto em `bracketMatches/{matchId}` automaticamente.
+3. `resultados.html`: em jogos de mata-mata finalizados mostra "→ {seleção} avançou · {Prorrogação|Pênaltis} · Prorr.: X x Y · Pên.: A x B" (apenas os campos presentes).
+4. **Pontuação do ranking**: sem alteração — `calculateScore` em `js/scoring.js` segue usando só `homeScore`/`awayScore` (90 min), conforme `regras-pontuacao.txt`.
+5. **Travas**: sem alteração — `locks`/`matchLocks` basica-se na data/hora do jogo (já relacionados).
+
+**Persistência:** o avançar do mata-mata (gerar próxima fase) não invalida palpites já salvos para esse jogo, pois o palpite está vinculado à partida (por `matchId`), independente de quem avança. O bolão pontua pelo placar dos 90 min, e o bracket segue seu fluxo paralelo de vencedores.
+

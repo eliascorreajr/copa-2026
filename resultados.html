@@ -193,6 +193,21 @@
         const result = results[m.id] || results[String(m.id)] || results[`${m.homeTeam}|${m.awayTeam}`];
         const hasResult = result && result.homeScore !== null && result.homeScore !== undefined && result.status === "finished";
         const isGroup = typeof currentRound === "number";
+        const isDraw = hasResult && result.homeScore === result.awayScore;
+        const showAdvance = !isGroup && hasResult && (result.winner || isDraw);
+
+        let advanceHtml = "";
+        if (showAdvance) {
+          const winnerName = result.winner === "home" ? result.homeTeam : (result.winner === "away" ? result.awayTeam : null);
+          const methodLabel = result.winnerMethod === "extra-time" ? "Prorrogação" : (result.winnerMethod === "penalties" ? "Pênaltis" : null);
+          const extraTimeLabel = (result.extraTimeHome !== null && result.extraTimeHome !== undefined && result.extraTimeAway !== null && result.extraTimeAway !== undefined)
+            ? `Prorr.: ${result.extraTimeHome} x ${result.extraTimeAway}` : null;
+          const penaltiesLabel = (result.penaltiesHome !== null && result.penaltiesHome !== undefined && result.penaltiesAway !== null && result.penaltiesAway !== undefined)
+            ? `Pên.: ${result.penaltiesHome} x ${result.penaltiesAway}` : null;
+          advanceHtml = `<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-tertiary);">
+            ${winnerName ? `→ ${escapeHtml(winnerName)} avançou` : "Empate"}${methodLabel ? ` · ${escapeHtml(methodLabel)}` : ""}${extraTimeLabel ? ` · ${escapeHtml(extraTimeLabel)}` : ""}${penaltiesLabel ? ` · ${escapeHtml(penaltiesLabel)}` : ""}
+          </div>`;
+        }
 
         html += `<div class="card match-card animate-fade-in${hasResult ? ' match-finished' : ''}">
           <div class="match-header">
@@ -220,7 +235,7 @@
               <div class="team-name">${escapeHtml(m.awayTeam)}</div>
             </div>
           </div>
-          ${hasResult ? '' : `<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-tertiary);">${escapeHtml(waitingLabel(m))}</div>`}
+          ${hasResult ? advanceHtml : `<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-tertiary);">${escapeHtml(waitingLabel(m))}</div>`}
         </div>`;
       });
 
