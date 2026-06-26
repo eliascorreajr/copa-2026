@@ -121,6 +121,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-primary" id="btn-recalculate-standings">Recalcular Classificação</button>
             <button class="btn btn-secondary" id="btn-generate-bracket">Gerar/Atualizar Mata-Mata</button>
+            <button class="btn btn-secondary" id="btn-export-knockout">Exportar Mata-Mata (Excel)</button>
           </div>
           <div id="knockout-status" style="margin-top:12px;font-size:13px;color:var(--text-tertiary);"></div>
         </div>
@@ -224,8 +225,8 @@
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=7";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=7";
     import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=8";
-    import { createBracketTemplate, resolveFixedSlots } from "./js/worldcup-bracket.js?v=8";
-    import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches } from "./js/worldcup-admin.js?v=8";
+    import { createBracketTemplate, resolveFixedSlots } from "./js/worldcup-bracket.js?v=9";
+    import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
 
     const ENABLE_SOFASCORE_SYNC = false;
     let allMatchesData = null;
@@ -256,6 +257,7 @@
       loadAllGuesses();
       loadLogs();
       populateMatchSelect();
+      loadKnockoutSnapshots();
     }
 
     function setupTabs() {
@@ -265,8 +267,34 @@
           tab.classList.add("active");
           document.querySelectorAll(".admin-panel").forEach(p => p.style.display = "none");
           document.getElementById(`tab-${tab.dataset.tab}`).style.display = "block";
+          if (tab.dataset.tab === "knockout") loadKnockoutSnapshots();
         });
       });
+    }
+
+    let knockoutLoadedOnce = false;
+
+    async function loadKnockoutSnapshots() {
+      try {
+        const [standings, thirdPlace, bracket] = await Promise.all([
+          loadStandingsSnapshot(db),
+          loadThirdPlaceRanking(db),
+          loadBracketMatches(db)
+        ]);
+        if (standings && Object.keys(standings).length > 0) renderStandingsReview(standings);
+        if (thirdPlace) renderThirdPlaceReview(thirdPlace);
+        if (Array.isArray(bracket) && bracket.length > 0) renderBracketReview(bracket);
+        if (!knockoutLoadedOnce) {
+          const statusEl = document.getElementById("knockout-status");
+          if (statusEl) {
+            statusEl.textContent = "Snapshots carregados do Firestore. Recalcule para atualizar.";
+            statusEl.style.color = "var(--text-tertiary)";
+          }
+        }
+        knockoutLoadedOnce = true;
+      } catch (e) {
+        console.warn("Erro ao carregar snapshots do mata-mata:", e);
+      }
     }
 
     function setupSofaScoreSyncState() {
@@ -1139,6 +1167,93 @@
         await addLog("ERRO MATA-MATA", e.message);
       } finally {
         btn.disabled = false;
+      }
+    });
+
+    document.getElementById("btn-export-knockout").addEventListener("click", async () => {
+      try {
+        const [standings, thirdPlace, bracket] = await Promise.all([
+          loadStandingsSnapshot(db),
+          loadThirdPlaceRanking(db),
+          loadBracketMatches(db)
+        ]);
+
+        function csvValue(value) {
+          const raw = String(value ?? "");
+          const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+          return `"${safe.replace(/"/g, '""')}"`;
+        }
+
+        let csv = "";
+
+        csv += "SECAO,GRUPO/JOGO,POS/RANK,SELECAO,PJ,V,E,D,GP,GC,SG,PTS,STATUS,OBS\n";
+        Object.keys(standings || {}).sort().forEach(group => {
+          const snap = standings[group];
+          (snap?.teams || []).forEach(team => {
+            csv += [
+              csvValue("Classificacao"),
+              csvValue(group),
+              team.position,
+              csvValue(team.team),
+              team.played,
+              team.wins,
+              team.draws,
+              team.losses,
+              team.goalsFor,
+              team.goalsAgainst,
+              team.goalDifference,
+              team.points,
+              csvValue(snap.complete ? "Completo" : "Incompleto"),
+              csvValue(team.needsManualTiebreak ? "Desempate manual" : "-")
+            ].join(",") + "\n";
+          });
+        });
+
+        csv += "\nSECAO,RANK,GRUPO,SELECAO,PTS,SG,GP,STATUS,OBS\n";
+        (thirdPlace?.teams || []).forEach(team => {
+          csv += [
+            csvValue("Melhores Terceiros"),
+            team.rank,
+            csvValue(team.group),
+            csvValue(team.team),
+            team.points,
+            team.goalDifference,
+            team.goalsFor,
+            csvValue(team.qualified ? "Classificado" : "Fora"),
+            csvValue(team.needsManualTiebreak ? "Desempate manual" : "-")
+          ].join(",") + "\n";
+        });
+
+        csv += "\nSECAO,JOGO,FASE,DATA,MANDANTE,VISITANTE,ORIGEM MANDANTE,ORIGEM VISITANTE,STATUS,VENCEDOR,MANUAL\n";
+        (bracket || []).forEach(match => {
+          csv += [
+            csvValue("Confrontos"),
+            csvValue(match.code || `M${match.matchId}`),
+            csvValue(getStageLabel(match.stage)),
+            csvValue(match.date || ""),
+            csvValue(match.homeTeam || "TBD"),
+            csvValue(match.awayTeam || "TBD"),
+            csvValue(match.homeSource || "-"),
+            csvValue(match.awaySource || "-"),
+            csvValue(match.status || "pending"),
+            csvValue(match.winner || ""),
+            csvValue(match.manualOverride ? "Sim" : "Nao")
+          ].join(",") + "\n";
+        });
+
+        const BOM = "\uFEFF";
+        const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `bolao-mata-mata-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        showToast("Exportação do mata-mata concluída!", "success");
+        await addLog("EXPORTAÇÃO MATA-MATA", "Classificação, terceiros e confrontos exportados em CSV");
+      } catch (e) {
+        showToast("Erro na exportação do mata-mata: " + e.message, "error");
       }
     });
 

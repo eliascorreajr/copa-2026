@@ -97,3 +97,21 @@ export async function loadBracketMatches(db) {
   });
   return matches.sort((a, b) => Number(a.matchId) - Number(b.matchId));
 }
+
+export async function loadStandingsSnapshot(db) {
+  const snap = await getDocs(collection(db, "standings"));
+  const standings = {};
+  snap.forEach((item) => {
+    const data = item.data();
+    const group = data.group || item.id;
+    standings[String(group)] = data;
+  });
+  return standings;
+}
+
+export async function loadThirdPlaceRanking(db) {
+  const snap = await getDocs(collection(db, "thirdPlaceRanking"));
+  const docs = [];
+  snap.forEach((item) => docs.push(item.data()));
+  return docs.find((d) => d) || docs[0] || null;
+}

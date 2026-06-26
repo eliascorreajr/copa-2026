@@ -2,7 +2,7 @@
 
 **Data:** 2026-06-26  
 **Projeto:** Bolao Quinta Categoria Show - Copa do Mundo 2026  
-**Status:** Proposto para implementacao incremental  
+**Status:** Implementado (branch `feature/mata-mata-copa-2026`), mergeado em `main`, deploy das `firestore.rules` concluído em 2026-06-26. Ajustes pós-deploy aplicados.  
 **Fonte principal de regras:** `copa_2026_resultados_regras_cruzamentos_ate_2026-06-26.md`  
 
 ---
@@ -607,4 +607,45 @@ A atualizacao sera aceita se:
 7. Desativar SofaScore no fluxo principal por flag.
 8. Rodar testes de regressao da fase de grupos.
 9. Publicar e sincronizar travas.
+
+---
+
+## 25. Status de Implementacao (Pipeline Concluido)
+
+Implementado e deployado em 2026-06-26 (commit `0c3aac2`, merge `--ff` para `main`, push para `origin/main` e `firebase deploy --only firestore:rules` no projeto `bolao-copa-2026-cba87`).
+
+### 25.1 Arquivos entregues
+
+- `js/worldcup-standings.js`: classificacao de grupos (3/1/0) e melhores terceiros, com confronto direto e `needsManualTiebreak`.
+- `js/worldcup-bracket.js`: template M73-M104, resolucao de slots fixos (`1A`, `2B`), slots de terceiros (`3A/B/C/D/F...`) pendentes por combinacao oficial, propagacao de vencedores (`Wxx`) e perdedores (`Lxx`) com preservacao de `manualOverride`.
+- `js/worldcup-admin.js`: persistencia Firestore AdminSuper-only em `standings/{group}`, `thirdPlaceRanking/current`, `bracketMatches/{matchId}`, `manualOverrides/{id}` e carregadores `loadBracketMatches`, `loadStandingsSnapshot`, `loadThirdPlaceRanking`.
+- `firestore.rules`: regras para `standings`, `thirdPlaceRanking`, `bracketMatches` e `manualOverrides` (leitura autenticada, escrita AdminSuper).
+- `admin.html`: aba `Mata-Mata` com Recalcular, Gerar/Atualizar, modal de edicao de confronto com auditoria em `manualOverrides`, exportacao Excel (CSV) de classificacao+terceiros+confrontos, e recarga automatica dos snapshots ao abrir/reabrir a aba.
+- `resultados.html` e `palpites.html`: leem `bracketMatches` com fallback para `matches.json`; palpites pendentes/parciais permanecem desativados.
+- `tests/fixtures/worldcup-sample-data.mjs`, `tests/worldcup-standings.test.mjs`, `tests/worldcup-bracket.test.mjs`: testes Node passando.
+- SofaScore desativado via `ENABLE_SOFASCORE_SYNC = false`; modulo preservado.
+- Plano e log de execucao em `docs/superpowers/plans/2026-06-26-mata-mata-copa-2026.md`.
+
+### 25.2 Ajustes Pós-Deploy (2026-06-26)
+
+1. **Horarios oficiais da fase de 32 corrigidos.** Os horarios de M73-M88 estavam como `T00:00:00` em `js/worldcup-bracket.js` e `data/matches.json`, fazendo placares, travas e countdown apontarem meia-noite em vez do kickoff real. Atualizado para horario de Brasilia conforme secao 7 de `copa_2026_resultados_regras_cruzamentos_ate_2026-06-26.md`:
+   - M73 16:00, M74 17:30, M75 22:00, M76 14:00, M77 18:00, M78 14:00, M79 22:00, M80 13:00, M81 21:00, M82 17:00, M83 20:00, M84 16:00, M85 00:00 (30/06), M86 19:00, M87 22:30, M88 15:00.
+   - M85 corrigido tambem na data (era 02/07 no fallback, agora 03/07 conforme oficial).
+   - Fases seguintes (M89-M104) permanecem com `T00:00:00` pois a programacao oficial de kickoff ainda nao esta no documento de referencia; o AdminSuper podera editar pelo modal de confronto quando a FIFA confirmar.
+   - Para aplicar na base ja publicada, o AdminSuper deve clicar `Gerar/Atualizar Mata-Mata` (reescreve `bracketMatches` no Firestore) e depois `Sincronizar Travas`.
+   - Horarios sao interpretados no fuso local do navegador; para participantes no Brasil equivalem a Brasilia (UTC-03:00), alinhado ao criterio de aceite de exibir horario local do Brasil.
+
+2. **Aba Mata-Mata agora persiste visualmente.** Antes, ao recalculas/gerar e sair/reabrir a aba, os cards voltavam ao placeholder. Adicionada `loadKnockoutSnapshots()` em `admin.html` que le `standings`, `thirdPlaceRanking` e `bracketMatches` do Firestore (via novos carregadores em `js/worldcup-admin.js`) e os renderiza na abertura da aba e no `init`.
+
+3. **Exportacao Excel adicionada na aba Mata-Mata.** Botao `Exportar Mata-Mata (Excel)` gera CSV (compativel com Excel, BOM UTF-8) com tres secoes: Classificacao (todos os grupos com PJ/V/E/D/GP/GC/SG/Pts/Status/Obs), Melhores Terceiros (rank/grupo/selecao/pts/SG/GP/status/obs) e Confrontos (jogo/fase/data/mandante/visitante/origens/status/vencedor/manual).
+
+4. **Exportacao de palpites ja cobre a fase mata-mata.** O export Excel da aba `Palpites` le todos os documentos de `guesses` e cruza com `matches` (resultados oficiais), independentemente da fase. Palpites do mata-mata sao incluidos automaticamente conforme os participantes os inserem.
+
+5. **Sincronizar Travas vs mata-mata.** O botao `Sincronizar Travas` da aba `Resultados` JA considera o mata-mata: `getMatchesDataForLocks` sobrepoe as datas de `bracketMatches` (editadas pelo admin) sobre `matches.json` antes de recalcular `locks/{dayKey}` e `matchLocks/{matchId}`. Por isso nao foi removido; ele e o mecanismo correto para atualizar travas quando datas/horarios de mata-mata mudam. Apos editar um confronto no modal, o admin tambem pode clicar `Sincronizar Travas` (ou o proprio fluxo de edicao ja dispara a sincronizacao).
+
+### 25.3 Pendencias operacionais (manual, AdminSuper)
+
+- Logar como AdminSuper, abrir `Mata-Mata`, clicar `Gerar/Atualizar Mata-Mata` para regravar `bracketMatches` no Firestore com os novos horarios e dados de classificacao, e clicar `Sincronizar Travas` para atualizar `locks`/`matchLocks`.
+- Validar no navegador os horarios exibidos em `palpites.html` (Fase de 32) contra a programacao oficial.
+- Quando a FIFA divulgar horarios de M89-M104 (oitavas em diante), o AdminSuper edita cada confronto no modal e sincroniza travas; `data/matches.json` permanece intocado ate confirmacao oficial (conforme PRD secao 17 e plano Task 9).
 

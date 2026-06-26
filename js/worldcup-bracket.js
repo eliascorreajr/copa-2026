@@ -11,23 +11,28 @@ const THIRD_PLACE_SOURCES = {
   "3D/E/I/J/L": ["D", "E", "I", "J", "L"]
 };
 
+// Horarios de Brasilia (UTC-03:00) conforme programacao oficial da FIFA
+// para a fase de 32 (secao 7 de copa_2026_resultados_regras_cruzamentos).
+// Horarios sem offset sao interpretados no fuso local do navegador; para
+// participantes no Brasil isso corresponde a Brasilia. Fases seguintes
+// (M89+) aguardam confirmacao oficial de horario e permanecem com T00:00:00.
 const MATCH_SOURCES = [
-  [73, "round-of-32", "2026-06-28T00:00:00", "2A", "2B"],
-  [74, "round-of-32", "2026-06-29T00:00:00", "1E", "3A/B/C/D/F"],
-  [75, "round-of-32", "2026-06-29T00:00:00", "1F", "2C"],
-  [76, "round-of-32", "2026-06-29T00:00:00", "1C", "2F"],
-  [77, "round-of-32", "2026-06-30T00:00:00", "1I", "3C/D/F/G/H"],
-  [78, "round-of-32", "2026-06-30T00:00:00", "2E", "2I"],
-  [79, "round-of-32", "2026-06-30T00:00:00", "1A", "3C/E/F/H/I"],
-  [80, "round-of-32", "2026-07-01T00:00:00", "1L", "3E/H/I/J/K"],
-  [81, "round-of-32", "2026-07-01T00:00:00", "1D", "3B/E/F/I/J"],
-  [82, "round-of-32", "2026-07-01T00:00:00", "1G", "3A/E/H/I/J"],
-  [83, "round-of-32", "2026-07-02T00:00:00", "2K", "2L"],
-  [84, "round-of-32", "2026-07-02T00:00:00", "1H", "2J"],
-  [85, "round-of-32", "2026-07-02T00:00:00", "1B", "3E/F/G/I/J"],
-  [86, "round-of-32", "2026-07-03T00:00:00", "1J", "2H"],
-  [87, "round-of-32", "2026-07-03T00:00:00", "1K", "3D/E/I/J/L"],
-  [88, "round-of-32", "2026-07-03T00:00:00", "2D", "2G"],
+  [73, "round-of-32", "2026-06-28T16:00:00", "2A", "2B"],
+  [74, "round-of-32", "2026-06-29T17:30:00", "1E", "3A/B/C/D/F"],
+  [75, "round-of-32", "2026-06-29T22:00:00", "1F", "2C"],
+  [76, "round-of-32", "2026-06-29T14:00:00", "1C", "2F"],
+  [77, "round-of-32", "2026-06-30T18:00:00", "1I", "3C/D/F/G/H"],
+  [78, "round-of-32", "2026-06-30T14:00:00", "2E", "2I"],
+  [79, "round-of-32", "2026-06-30T22:00:00", "1A", "3C/E/F/H/I"],
+  [80, "round-of-32", "2026-07-01T13:00:00", "1L", "3E/H/I/J/K"],
+  [81, "round-of-32", "2026-07-01T21:00:00", "1D", "3B/E/F/I/J"],
+  [82, "round-of-32", "2026-07-01T17:00:00", "1G", "3A/E/H/I/J"],
+  [83, "round-of-32", "2026-07-02T20:00:00", "2K", "2L"],
+  [84, "round-of-32", "2026-07-02T16:00:00", "1H", "2J"],
+  [85, "round-of-32", "2026-07-03T00:00:00", "1B", "3E/F/G/I/J"],
+  [86, "round-of-32", "2026-07-03T19:00:00", "1J", "2H"],
+  [87, "round-of-32", "2026-07-03T22:30:00", "1K", "3D/E/I/J/L"],
+  [88, "round-of-32", "2026-07-03T15:00:00", "2D", "2G"],
   [89, "round-of-16", "2026-07-04T00:00:00", "W74", "W77"],
   [90, "round-of-16", "2026-07-04T00:00:00", "W73", "W75"],
   [91, "round-of-16", "2026-07-05T00:00:00", "W76", "W78"],
