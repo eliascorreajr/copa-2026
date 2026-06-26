@@ -1611,7 +1611,9 @@
         }
 
         showToast("Resultado salvo!", "success");
-        const extraInfo = isKnockout && winner ? ` (avançou: ${winner === "home" ? teams.homeTeam : teams.awayTeam}${winnerMethod ? ` — ${winnerMethod === "extra-time" ? "prorrogação" : "pênaltis"}" : ""})` : "";
+        const extraInfo = isKnockout && winner
+          ? ` (avançou: ${winner === "home" ? teams.homeTeam : teams.awayTeam}${winnerMethod ? ` — ${winnerMethod === "extra-time" ? "prorrogação" : "pênaltis"}` : ""})`
+          : "";
         await addLog("RESULTADO MANUAL", `${teams.homeTeam} ${parsedHome} x ${parsedAway} ${teams.awayTeam}${extraInfo}`);
         document.getElementById("manual-home-score").value = "";
         document.getElementById("manual-away-score").value = "";

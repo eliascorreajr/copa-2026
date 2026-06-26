@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Resultados - Bolão Quinta Categoria Show</title>
-  <link rel="stylesheet" href="css/style.css?v=7">
+  <link rel="stylesheet" href="css/style.css?v=8">
   <link rel="icon" href="img/quinta-categoria-show-logo.jpg" type="image/jpeg">
 </head>
 <body>
@@ -42,20 +42,28 @@
   </div>
 
   <script type="module">
-    import { auth, db, checkAuth, setupNavbar, escapeHtml } from "./js/auth.js?v=7";
+    import { auth, db, checkAuth, setupNavbar, escapeHtml } from "./js/auth.js?v=8";
     import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
-    import { buildResultLookup } from "./js/sofascore.js?v=7";
+    import { buildResultLookup } from "./js/sofascore.js?v=8";
 
     let matchesData = null;
     let bracketMatches = {};
     let currentRound = 1;
 
     async function init() {
-      const { user, profile } = await checkAuth();
-      setupNavbar(profile);
-      await loadMatches();
-      setupRoundTabs();
-      renderResults();
+      try {
+        const { user, profile } = await checkAuth();
+        setupNavbar(profile);
+        await loadMatches();
+        setupRoundTabs();
+        renderResults();
+      } catch (e) {
+        console.error("Erro ao inicializar resultados:", e);
+        const container = document.getElementById("results-container");
+        if (container) {
+          container.innerHTML = `<p style="text-align:center;color:var(--accent-red);">Erro ao carregar resultados: ${escapeHtml(e.message || e)}</p>`;
+        }
+      }
     }
 
     async function loadMatches() {
