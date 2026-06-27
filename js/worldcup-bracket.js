@@ -16,7 +16,8 @@ const THIRD_PLACE_SOURCES = {
 export const CONFIRMED_THIRD_PLACE_ASSIGNMENTS = Object.freeze({
   "M74.away": "D",
   "M77.away": "F",
-  "M81.away": "B"
+  "M81.away": "B",
+  "M86.home": "Argentina"
 });
 
 // Horarios de Brasilia (UTC-03:00) conforme programacao oficial da FIFA
@@ -131,6 +132,41 @@ function getAssignmentValue(match, slot, source, thirdPlaceAssignments) {
   return null;
 }
 
+function getExactAssignmentValue(match, slot, assignments) {
+  const keys = [
+    `M${match.matchId}.${slot}`,
+    `${match.matchId}.${slot}`
+  ];
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(assignments || {}, key)) {
+      return assignments[key];
+    }
+  }
+
+  return null;
+}
+
+function getConfirmedSlotTeam(match, slot, groupStandings, assignments) {
+  const assignment = getExactAssignmentValue(match, slot, assignments);
+  if (!assignment) return null;
+
+  if (typeof assignment === "object") {
+    if (assignment.team) return assignment.team;
+    if (/^[123][A-L]$/.test(assignment.source || "")) {
+      return getTeamByPosition(groupStandings, assignment.source.slice(1), Number(assignment.source[0]))?.team || null;
+    }
+    return null;
+  }
+
+  if (/^[123][A-L]$/.test(assignment)) {
+    return getTeamByPosition(groupStandings, assignment.slice(1), Number(assignment[0]))?.team || null;
+  }
+
+  if (/^[A-L]$/.test(assignment)) return null;
+  return assignment;
+}
+
 function normalizeThirdPlaceAssignment(assignment, candidates) {
   if (!assignment) return null;
   if (typeof assignment === "object") return assignment;
@@ -160,7 +196,8 @@ function resolveSlot(match, slot, groupStandings, thirdPlaceAssignments) {
   if (hasSlotManualOverride(match, slot)) return match;
 
   const source = match[`${slot}Source`];
-  const team = getFixedSourceTeam(source, groupStandings)
+  const team = getConfirmedSlotTeam(match, slot, groupStandings, thirdPlaceAssignments)
+    || getFixedSourceTeam(source, groupStandings)
     || getThirdPlaceTeam(match, slot, source, groupStandings, thirdPlaceAssignments);
   if (!team) return match;
 

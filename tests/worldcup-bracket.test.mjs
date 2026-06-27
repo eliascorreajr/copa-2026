@@ -89,6 +89,15 @@ for (const [matchId, [homeTeam, awayTeam, status]] of expectedCurrentRoundOf32) 
   assert.equal(match.status, status, `M${matchId} status`);
 }
 
+const jIncompleteStandings = {
+  ...currentRoundOf32Standings,
+  J: { complete: false, teams: [{ team: "Argentina", position: 1 }] }
+};
+const jIncompleteRoundOf32 = resolveFixedSlots(createBracketTemplate(), jIncompleteStandings, CONFIRMED_THIRD_PLACE_ASSIGNMENTS);
+assert.equal(jIncompleteRoundOf32.find((match) => match.matchId === 86).homeTeam, "Argentina");
+assert.equal(jIncompleteRoundOf32.find((match) => match.matchId === 86).awayTeam, "Cabo Verde");
+assert.equal(jIncompleteRoundOf32.find((match) => match.matchId === 86).status, "defined");
+
 const manuallyEdited = createBracketTemplate();
 manuallyEdited[0] = {
   ...manuallyEdited[0],
