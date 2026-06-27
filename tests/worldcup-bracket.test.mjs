@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  CONFIRMED_THIRD_PLACE_ASSIGNMENTS,
   createBracketTemplate,
   determineKnockoutWinner,
   propagateKnockoutWinner,
@@ -43,6 +44,22 @@ assert.equal(m74.homeTeam, "Alemanha");
 assert.equal(m74.awayTeam, "TBD");
 assert.equal(m74.awayResolved, false);
 assert.equal(m74.status, "partially_defined");
+
+const resolvedWithConfirmedThirds = resolveFixedSlots(bracket, standings, CONFIRMED_THIRD_PLACE_ASSIGNMENTS);
+const m74Confirmed = resolvedWithConfirmedThirds.find((match) => match.matchId === 74);
+assert.equal(m74Confirmed.homeTeam, "Alemanha");
+assert.equal(m74Confirmed.awayTeam, "Paraguai");
+assert.equal(m74Confirmed.status, "defined");
+
+const m77Confirmed = resolvedWithConfirmedThirds.find((match) => match.matchId === 77);
+assert.equal(m77Confirmed.homeTeam, "TBD");
+assert.equal(m77Confirmed.awayTeam, "Suecia");
+assert.equal(m77Confirmed.status, "partially_defined");
+
+const m81Confirmed = resolvedWithConfirmedThirds.find((match) => match.matchId === 81);
+assert.equal(m81Confirmed.homeTeam, "Estados Unidos");
+assert.equal(m81Confirmed.awayTeam, "Bosnia");
+assert.equal(m81Confirmed.status, "defined");
 
 const manuallyEdited = createBracketTemplate();
 manuallyEdited[0] = {

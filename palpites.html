@@ -161,8 +161,7 @@
     function isMatchGuessable(match) {
       if (!isKnockout(match)) return true;
       if (match.hasBracketMatch) {
-        return match.bracketStatus === "defined"
-          && isSideResolved(match, "home")
+        return isSideResolved(match, "home")
           && isSideResolved(match, "away");
       }
       return hasResolvedTeam(match.homeTeam) && hasResolvedTeam(match.awayTeam);

@@ -11,6 +11,14 @@ const THIRD_PLACE_SOURCES = {
   "3D/E/I/J/L": ["D", "E", "I", "J", "L"]
 };
 
+// Terceiros colocados ja publicados na tabela oficial da fase de 32.
+// Os demais slots de terceiro continuam pendentes ate haver definicao oficial.
+export const CONFIRMED_THIRD_PLACE_ASSIGNMENTS = Object.freeze({
+  "M74.away": "D",
+  "M77.away": "F",
+  "M81.away": "B"
+});
+
 // Horarios de Brasilia (UTC-03:00) conforme programacao oficial da FIFA
 // para a fase de 32 (secao 7 de copa_2026_resultados_regras_cruzamentos).
 // Horarios sem offset sao interpretados no fuso local do navegador; para

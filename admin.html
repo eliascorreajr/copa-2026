@@ -340,7 +340,7 @@
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=9";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=9";
     import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=9";
-    import { createBracketTemplate, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=9";
+    import { CONFIRMED_THIRD_PLACE_ASSIGNMENTS, createBracketTemplate, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=10";
     import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
 
     const ENABLE_SOFASCORE_SYNC = false;
@@ -1321,7 +1321,7 @@
       try {
         const { standings } = await calculateAndSaveStandings();
         const bracketTemplate = createBracketTemplate();
-        const generatedBracket = resolveFixedSlots(bracketTemplate, standings);
+        const generatedBracket = resolveFixedSlots(bracketTemplate, standings, CONFIRMED_THIRD_PLACE_ASSIGNMENTS);
         const existingBracket = await loadBracketMatches(db);
         const bracket = mergeManualBracketOverrides(generatedBracket, existingBracket);
 
