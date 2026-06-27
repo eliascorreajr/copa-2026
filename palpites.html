@@ -124,11 +124,17 @@
     }
 
     function hasResolvedTeam(team) {
-      return Boolean(team && team !== "TBD");
+      const value = String(team || "").trim();
+      return Boolean(value)
+        && value !== "TBD"
+        && value !== "A definir"
+        && !/^[12][A-L]$/.test(value)
+        && !/^3[A-L](\/[A-L])+$/.test(value)
+        && !/^[WL]\d+$/.test(value);
     }
 
     function isSideResolved(match, side) {
-      return match[`${side}Resolved`] !== false && hasResolvedTeam(match[`${side}Team`]);
+      return hasResolvedTeam(match[`${side}Team`]);
     }
 
     function loadBracketMatch(match) {
@@ -144,8 +150,8 @@
         awayTeam: sideLabel(match, bracket, "away"),
         homeSource: bracket.homeSource,
         awaySource: bracket.awaySource,
-        homeResolved: bracket.homeResolved,
-        awayResolved: bracket.awayResolved,
+        homeResolved: bracket.homeResolved === true || hasResolvedTeam(bracket.homeTeam),
+        awayResolved: bracket.awayResolved === true || hasResolvedTeam(bracket.awayTeam),
         hasBracketMatch: true
       };
     }

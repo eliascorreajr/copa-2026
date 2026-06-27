@@ -340,7 +340,7 @@
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=9";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=9";
     import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=9";
-    import { CONFIRMED_THIRD_PLACE_ASSIGNMENTS, createBracketTemplate, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=10";
+    import { CONFIRMED_THIRD_PLACE_ASSIGNMENTS, createBracketTemplate, resolveBracketStatus, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=11";
     import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
 
     const ENABLE_SOFASCORE_SYNC = false;
@@ -1015,12 +1015,36 @@
       return match?.manualOverride === true;
     }
 
+    function isResolvedBracketTeam(team) {
+      const value = String(team || "").trim();
+      return Boolean(value)
+        && value !== "TBD"
+        && value !== "A definir"
+        && !/^[12][A-L]$/.test(value)
+        && !/^3[A-L](\/[A-L])+$/.test(value)
+        && !/^[WL]\d+$/.test(value);
+    }
+
+    function normalizeBracketResolution(match) {
+      const normalized = {
+        ...match,
+        homeResolved: isResolvedBracketTeam(match?.homeTeam),
+        awayResolved: isResolvedBracketTeam(match?.awayTeam)
+      };
+
+      if (!hasBracketFieldOverride(match, "status")) {
+        normalized.status = resolveBracketStatus(normalized);
+      }
+
+      return normalized;
+    }
+
     function mergeManualBracketOverrides(generatedBracket, existingBracket) {
       const existingById = new Map((existingBracket || []).map(match => [getBracketMatchKey(match), match]));
 
       return (generatedBracket || []).map(match => {
         const existing = existingById.get(getBracketMatchKey(match));
-        if (!existing) return match;
+        if (!existing) return normalizeBracketResolution(match);
 
         const merged = {
           ...match,
@@ -1037,7 +1061,7 @@
           }
         });
 
-        return merged;
+        return normalizeBracketResolution(merged);
       });
     }
 
@@ -1164,7 +1188,7 @@
           manualFields[field] = true;
         });
 
-        const updatedMatch = {
+        const updatedMatch = normalizeBracketResolution({
           ...original,
           ...editedValues,
           matchId: Number(original.matchId ?? original.id ?? matchId),
@@ -1173,7 +1197,7 @@
           awayManualOverride: manualFields.awayTeam === true,
           manualFields,
           updatedAt: new Date().toISOString()
-        };
+        });
 
         await setDoc(doc(db, "bracketMatches", String(matchId)), updatedMatch, { merge: true });
 
