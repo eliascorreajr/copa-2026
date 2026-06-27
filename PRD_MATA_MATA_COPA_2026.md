@@ -712,3 +712,103 @@ Para cada rodada/jornada do mata-mata, siga esta ordem:
 - Palpites já salvos não são invalidados quando o bracket avança — ficam vinculados à partida por `matchId`.
 - Grupos incompletos ou terceiros com `needsManualTiebreak` exigem ação manual do AdminSuper (override no modal de edição de confronto ou em `standings`).
 
+### 25.8 Correção de produção: terceiros definidos e documentos `bracketMatches` defasados (2026-06-27)
+
+**Sintoma reportado:** após o AdminSuper lançar resultados de jogos da fase de grupos e seguir o fluxo de `Mata-Mata` + `Resultados` + `Sincronizar Travas`, alguns confrontos da fase de 32 continuavam indefinidos em `palpites.html`. Exemplos percebidos:
+
+- M74 aparecia como `Alemanha x TBD`, mas o calendário oficial já indicava `Alemanha x Paraguai`.
+- M77 aparecia como `França x TBD`, mas o calendário oficial já indicava `França x Suécia`.
+- M81 aparecia como `Estados Unidos x TBD`, mas o calendário oficial já indicava `Estados Unidos x Bósnia e Herzegovina`.
+- M86 aparecia como `TBD x Cabo Verde`, mas o calendário oficial já indicava `Argentina x Cabo Verde`.
+
+**Causa 1:** a implementação inicial respeitou o PRD seção 9.1 e não aplicava heurística para terceiros colocados. Como a tabela oficial de combinação de terceiros ainda não estava codificada, `resolveFixedSlots()` resolvia apenas fontes diretas (`1A`, `2B`, `1I`, `2G`, etc.) e deixava slots `3A/B/C/D/F`, `3C/D/F/G/H` e `3B/E/F/I/J` pendentes.
+
+**Solução 1:** adicionada uma tabela explícita de alocações já publicadas/confirmadas em `js/worldcup-bracket.js`:
+
+```javascript
+CONFIRMED_THIRD_PLACE_ASSIGNMENTS = {
+  "M74.away": "D",
+  "M77.away": "F",
+  "M81.away": "B",
+  "M86.home": "Argentina"
+}
+```
+
+Essa tabela não inventa novos cruzamentos: ela só fixa slots já confirmados pelo calendário informado pelo AdminSuper. Os demais slots de terceiros permanecem pendentes.
+
+**Causa 2:** alguns documentos `bracketMatches` no Firestore foram criados antes da correção e continuavam com `homeTeam`/`awayTeam` em `TBD` ou com `homeResolved`/`awayResolved` desatualizados. Assim, mesmo com o código corrigido, a tela pública continuava lendo o estado antigo do Firestore.
+
+**Solução 2:** usando Firebase CLI autenticada + REST API do Firestore, foram inspecionados e corrigidos diretamente em produção os documentos:
+
+- `bracketMatches/74`: `Alemanha x Paraguai`, `awayResolved: true`, `status: "defined"`.
+- `bracketMatches/77`: `França x Suécia`, `awayResolved: true`, `status: "defined"`.
+- `bracketMatches/81`: `Estados Unidos x Bósnia e Herzegovina`, `awayResolved: true`, `status: "defined"`.
+- `bracketMatches/86`: `Argentina x Cabo Verde`, `homeResolved: true`, `status: "defined"`.
+
+**Estado verificado no Firestore após a correção:**
+
+```text
+M73: África do Sul x Canadá | defined
+M74: Alemanha x Paraguai | defined
+M75: Holanda x Marrocos | defined
+M76: Brasil x Japão | defined
+M77: França x Suécia | defined
+M78: Costa do Marfim x Noruega | defined
+M79: México x TBD | partially_defined
+M80: TBD x TBD | pending
+M81: Estados Unidos x Bósnia e Herzegovina | defined
+M82: Bélgica x TBD | partially_defined
+M83: TBD x TBD | pending
+M84: Espanha x TBD | partially_defined
+M85: Suíça x TBD | partially_defined
+M86: Argentina x Cabo Verde | defined
+M87: TBD x TBD | pending
+M88: Austrália x Egito | defined
+```
+
+### 25.9 Correção de produção: preservação de overrides por campo (2026-06-27)
+
+**Erro encontrado:** `manualOverride: true` era tratado como se todo o confronto estivesse protegido contra atualização automática. Isso era amplo demais: se o AdminSuper tivesse editado apenas a data, status ou observação, o sistema podia preservar indevidamente `homeTeam`/`awayTeam` antigos e impedir atualização dos times.
+
+**Solução:** `js/worldcup-bracket.js` e `admin.html` passaram a preservar overrides por campo:
+
+- `manualFields.homeTeam === true` preserva somente mandante.
+- `manualFields.awayTeam === true` preserva somente visitante.
+- `homeManualOverride` e `awayManualOverride` continuam aceitos por compatibilidade com documentos antigos.
+- Edição de data, status, notas ou motivo não bloqueia mais a resolução automática dos times.
+
+**Correção complementar em `palpites.html`:** a tela de palpites passou a considerar um confronto palpável quando os dois lados têm nomes reais de seleções, independentemente de flags antigos salvos no Firestore. Valores como `TBD`, `A definir`, `1I`, `3C/D/F/G/H`, `W73` e `L101` continuam tratados como não resolvidos.
+
+### 25.10 Commits publicados relacionados ao incidente (2026-06-27)
+
+- `317bc96 fix(mata-mata): resolver terceiros definidos`
+  - Adicionou alocações confirmadas de terceiros M74, M77 e M81.
+- `75a7e75 fix(mata-mata): normalizar confrontos salvos`
+  - Recalculou `homeResolved`/`awayResolved` a partir dos nomes reais e liberou palpites quando ambos os times estão resolvidos.
+- `d5427ea fix(mata-mata): preservar overrides por campo`
+  - Corrigiu a preservação ampla demais de `manualOverride`.
+  - Adicionou testes para tabela atual da fase de 32 e casos de override por data.
+- `25f2cde fix(mata-mata): fixar Argentina no M86`
+  - Protegeu M86 contra regressão enquanto `standings/J` estiver incompleto no Firestore.
+
+**Validações executadas:**
+
+```bash
+node tests/worldcup-bracket.test.mjs
+node tests/worldcup-standings.test.mjs
+node --check js/worldcup-bracket.js
+node --check /tmp/copa-admin-inline.js
+git diff --check
+```
+
+### 25.11 Instrução obrigatória para futuras IAs/agentes
+
+Antes de diagnosticar ou negar capacidade neste projeto, a IA/agente deve:
+
+1. Ler todos os documentos Markdown/TXT relevantes da pasta do projeto, incluindo arquivos versionados e auxiliares ignorados pelo Git quando estiverem disponíveis localmente.
+2. Verificar `.firebaserc`, `firebase.json`, `firestore.rules`, `tools/redefinir-senha.sh`, `usuarios-firebase.txt`, `Guia_Configuracao_GitHub_Firebase.md`, `DOC_Projeto_Bolao.md`, `MANUAL_ADMIN.md`, `PRD_MATA_MATA_COPA_2026.md` e `docs/superpowers/plans/2026-06-26-mata-mata-copa-2026.md`.
+3. Reconhecer que o projeto possui Git local/remoto e Firebase/Firestore configurado.
+4. Checar se a Firebase CLI está autenticada antes de afirmar que não há acesso ao Firestore.
+5. Nunca expor senhas, tokens ou credenciais lidas nos arquivos locais; usar esses dados apenas para operação autorizada e responder com resumos seguros.
+
+Motivo desta instrução: em 2026-06-27, a IA inicialmente não leu todos os documentos solicitados, deixou de reconhecer acesso ao Firestore já documentado na pasta e negou uma capacidade que estava disponível via Firebase CLI local.
