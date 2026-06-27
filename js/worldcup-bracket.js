@@ -87,8 +87,13 @@ function slotIsResolved(match, slot) {
   return !!team && team !== TBD;
 }
 
+function getManualFields(match) {
+  return (match?.manualFields && typeof match.manualFields === "object") ? match.manualFields : {};
+}
+
 function hasSlotManualOverride(match, slot) {
-  return match?.manualOverride === true || match?.[`${slot}ManualOverride`] === true;
+  const manualFields = getManualFields(match);
+  return manualFields[`${slot}Team`] === true || match?.[`${slot}ManualOverride`] === true;
 }
 
 function getTeamByPosition(groupStandings, group, position) {

@@ -61,6 +61,34 @@ assert.equal(m81Confirmed.homeTeam, "Estados Unidos");
 assert.equal(m81Confirmed.awayTeam, "Bosnia");
 assert.equal(m81Confirmed.status, "defined");
 
+const currentRoundOf32Standings = {
+  ...standings,
+  G: { complete: true, teams: [{ team: "Belgica", position: 1 }, { team: "Egito", position: 2 }] },
+  H: { complete: true, teams: [{ team: "Espanha", position: 1 }, { team: "Cabo Verde", position: 2 }] },
+  I: { complete: true, teams: [{ team: "Franca", position: 1 }, { team: "Noruega", position: 2 }] },
+  J: { complete: true, teams: [{ team: "Argentina", position: 1 }] }
+};
+const currentRoundOf32 = resolveFixedSlots(createBracketTemplate(), currentRoundOf32Standings, CONFIRMED_THIRD_PLACE_ASSIGNMENTS);
+const expectedCurrentRoundOf32 = new Map([
+  [73, ["Africa do Sul", "Canada", "defined"]],
+  [74, ["Alemanha", "Paraguai", "defined"]],
+  [75, ["Holanda", "Marrocos", "defined"]],
+  [76, ["Brasil", "Japao", "defined"]],
+  [77, ["Franca", "Suecia", "defined"]],
+  [78, ["Costa do Marfim", "Noruega", "defined"]],
+  [81, ["Estados Unidos", "Bosnia", "defined"]],
+  [82, ["Belgica", "TBD", "partially_defined"]],
+  [84, ["Espanha", "TBD", "partially_defined"]],
+  [86, ["Argentina", "Cabo Verde", "defined"]],
+  [88, ["Australia", "Egito", "defined"]]
+]);
+for (const [matchId, [homeTeam, awayTeam, status]] of expectedCurrentRoundOf32) {
+  const match = currentRoundOf32.find((item) => item.matchId === matchId);
+  assert.equal(match.homeTeam, homeTeam, `M${matchId} home`);
+  assert.equal(match.awayTeam, awayTeam, `M${matchId} away`);
+  assert.equal(match.status, status, `M${matchId} status`);
+}
+
 const manuallyEdited = createBracketTemplate();
 manuallyEdited[0] = {
   ...manuallyEdited[0],
@@ -70,6 +98,17 @@ manuallyEdited[0] = {
 };
 const resolvedWithManual = resolveFixedSlots(manuallyEdited, standings);
 assert.equal(resolvedWithManual.find((match) => match.matchId === 73).homeTeam, "Manual Team");
+
+const dateOnlyManual = createBracketTemplate();
+dateOnlyManual[0] = {
+  ...dateOnlyManual[0],
+  date: "2026-06-28T17:00:00",
+  manualOverride: true,
+  manualFields: { date: true }
+};
+const resolvedDateOnlyManual = resolveFixedSlots(dateOnlyManual, standings);
+assert.equal(resolvedDateOnlyManual.find((match) => match.matchId === 73).homeTeam, "Africa do Sul");
+assert.equal(resolvedDateOnlyManual.find((match) => match.matchId === 73).awayTeam, "Canada");
 
 const advanced = propagateKnockoutWinner(resolved, { matchId: 73, homeScore: 2, awayScore: 1 });
 const m90 = advanced.find((match) => match.matchId === 90);
@@ -85,6 +124,22 @@ const protectedDestination = resolved.map((match) => (
 ));
 const protectedAdvanced = propagateKnockoutWinner(protectedDestination, { matchId: 73, homeScore: 2, awayScore: 1 });
 assert.equal(protectedAdvanced.find((match) => match.matchId === 90).homeTeam, "Protected");
+
+const mixedManualDestination = resolved.map((match) => (
+  match.matchId === 90
+    ? { ...match, homeTeam: "Protected", homeResolved: true, homeManualOverride: true, manualFields: { date: true } }
+    : match
+));
+const mixedManualAdvanced = propagateKnockoutWinner(mixedManualDestination, { matchId: 73, homeScore: 2, awayScore: 1 });
+assert.equal(mixedManualAdvanced.find((match) => match.matchId === 90).homeTeam, "Protected");
+
+const dateOnlyDestination = resolved.map((match) => (
+  match.matchId === 90
+    ? { ...match, manualOverride: true, manualFields: { date: true } }
+    : match
+));
+const dateOnlyAdvanced = propagateKnockoutWinner(dateOnlyDestination, { matchId: 73, homeScore: 2, awayScore: 1 });
+assert.equal(dateOnlyAdvanced.find((match) => match.matchId === 90).homeTeam, "Africa do Sul");
 
 assert.throws(
   () => determineKnockoutWinner({ matchId: 73, homeScore: 1, awayScore: 1 }),

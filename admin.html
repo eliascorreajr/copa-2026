@@ -340,7 +340,7 @@
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=9";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=9";
     import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=9";
-    import { CONFIRMED_THIRD_PLACE_ASSIGNMENTS, createBracketTemplate, resolveBracketStatus, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=11";
+    import { CONFIRMED_THIRD_PLACE_ASSIGNMENTS, createBracketTemplate, resolveBracketStatus, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=12";
     import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
 
     const ENABLE_SOFASCORE_SYNC = false;
@@ -1009,10 +1009,10 @@
 
     function hasBracketFieldOverride(match, field) {
       const manualFields = getManualFields(match);
-      if (Object.keys(manualFields).length > 0) return manualFields[field] === true;
+      if (manualFields[field] === true) return true;
       if (field === "homeTeam" && match?.homeManualOverride === true) return true;
       if (field === "awayTeam" && match?.awayManualOverride === true) return true;
-      return match?.manualOverride === true;
+      return false;
     }
 
     function isResolvedBracketTeam(team) {

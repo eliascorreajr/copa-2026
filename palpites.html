@@ -118,7 +118,7 @@
       const status = bracket.status;
       const team = bracket[`${side}Team`];
       const source = bracket[`${side}Source`];
-      if (status === "defined" && team && team !== "TBD") return team;
+      if (hasResolvedTeam(team)) return team;
       if (status === "pending" || status === "partially_defined") return source || team || match[`${side}Team`];
       return team || source || match[`${side}Team`];
     }
