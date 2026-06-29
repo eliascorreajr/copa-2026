@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  applyKnockoutResults,
   CONFIRMED_THIRD_PLACE_ASSIGNMENTS,
   createBracketTemplate,
   determineKnockoutWinner,
@@ -184,6 +185,44 @@ assert.equal(m90.homeTeam, "Africa do Sul");
 assert.equal(m90.homeResolved, true);
 assert.equal(m90.status, "partially_defined");
 assert.equal(resolved.find((match) => match.matchId === 90).homeTeam, "TBD");
+
+const replayedCanadaResult = applyKnockoutResults(resolved, {
+  73: {
+    matchId: 73,
+    homeTeam: "Africa do Sul",
+    awayTeam: "Canada",
+    homeScore: 0,
+    awayScore: 1,
+    status: "finished"
+  }
+});
+const replayedM73 = replayedCanadaResult.find((match) => match.matchId === 73);
+const replayedM90 = replayedCanadaResult.find((match) => match.matchId === 90);
+assert.equal(replayedM73.winner, "Canada");
+assert.equal(replayedM73.loser, "Africa do Sul");
+assert.equal(replayedM73.status, "finished");
+assert.equal(replayedM90.homeTeam, "Canada");
+assert.equal(replayedM90.homeResolved, true);
+assert.equal(replayedM90.status, "partially_defined");
+
+const replayedFinalPath = applyKnockoutResults(finalRoundOf32, {
+  73: { matchId: 73, homeTeam: "Africa do Sul", awayTeam: "Canada", homeScore: 0, awayScore: 1 },
+  75: { matchId: 75, homeTeam: "Holanda", awayTeam: "Marrocos", homeScore: 2, awayScore: 0 },
+  90: { matchId: 90, homeTeam: "Canada", awayTeam: "Holanda", homeScore: 2, awayScore: 1 },
+  74: { matchId: 74, homeTeam: "Alemanha", awayTeam: "Paraguai", homeScore: 2, awayScore: 0 },
+  77: { matchId: 77, homeTeam: "Franca", awayTeam: "Suecia", homeScore: 1, awayScore: 0 },
+  89: { matchId: 89, homeTeam: "Alemanha", awayTeam: "Franca", homeScore: 1, awayScore: 0 },
+  97: { matchId: 97, homeTeam: "Alemanha", awayTeam: "Canada", homeScore: 0, awayScore: 1 },
+  98: { matchId: 98, homeTeam: "Portugal", awayTeam: "Espanha", homeScore: 2, awayScore: 0 },
+  101: { matchId: 101, homeTeam: "Canada", awayTeam: "Portugal", homeScore: 1, awayScore: 0 },
+  102: { matchId: 102, homeTeam: "Brasil", awayTeam: "Argentina", homeScore: 3, awayScore: 2 }
+});
+assert.equal(replayedFinalPath.find((match) => match.matchId === 90).homeTeam, "Canada");
+assert.equal(replayedFinalPath.find((match) => match.matchId === 97).awayTeam, "Canada");
+assert.equal(replayedFinalPath.find((match) => match.matchId === 101).homeTeam, "Canada");
+assert.equal(replayedFinalPath.find((match) => match.matchId === 104).homeTeam, "Canada");
+assert.equal(replayedFinalPath.find((match) => match.matchId === 103).homeTeam, "Portugal");
+assert.equal(replayedFinalPath.find((match) => match.matchId === 104).awayTeam, "Brasil");
 
 const protectedDestination = resolved.map((match) => (
   match.matchId === 90

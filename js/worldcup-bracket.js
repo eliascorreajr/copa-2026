@@ -419,3 +419,32 @@ export function propagateKnockoutWinner(bracket, matchResult, manualWinner = nul
   propagated = propagateTeamToSource(propagated, `L${matchId}`, loser);
   return propagated;
 }
+
+function getResultByMatchId(resultsByMatchId, matchId) {
+  if (!resultsByMatchId) return null;
+  if (resultsByMatchId instanceof Map) {
+    return resultsByMatchId.get(matchId) || resultsByMatchId.get(String(matchId)) || null;
+  }
+  return resultsByMatchId[matchId] || resultsByMatchId[String(matchId)] || null;
+}
+
+export function applyKnockoutResults(bracket, resultsByMatchId = {}) {
+  return (bracket || [])
+    .map(cloneMatch)
+    .sort((a, b) => Number(a.matchId ?? a.id) - Number(b.matchId ?? b.id))
+    .reduce((currentBracket, match) => {
+      const matchId = Number(match.matchId ?? match.id);
+      const result = getResultByMatchId(resultsByMatchId, matchId);
+      if (!hasCompleteScore(result)) return currentBracket;
+
+      const currentMatch = currentBracket.find((item) => Number(item.matchId ?? item.id) === matchId) || match;
+      const matchResult = {
+        ...result,
+        matchId,
+        homeTeam: result.homeTeam || currentMatch.homeTeam,
+        awayTeam: result.awayTeam || currentMatch.awayTeam
+      };
+
+      return propagateKnockoutWinner(currentBracket, matchResult, result.winner || null);
+    }, (bracket || []).map(cloneMatch));
+}

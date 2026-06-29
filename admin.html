@@ -340,7 +340,7 @@
     import { calculateScore, hasCompleteScore, parseScoreInput } from "./js/scoring.js?v=9";
     import { getDayKey, getDayLockInfo } from "./js/matches.js?v=9";
     import { calculateAllGroupStandings, calculateThirdPlaceRanking } from "./js/worldcup-standings.js?v=9";
-    import { createBracketTemplate, getThirdPlaceAssignmentsForRanking, resolveBracketStatus, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=14";
+    import { applyKnockoutResults, createBracketTemplate, getThirdPlaceAssignmentsForRanking, resolveBracketStatus, resolveFixedSlots, propagateKnockoutWinner } from "./js/worldcup-bracket.js?v=15";
     import { saveStandingsSnapshot, saveThirdPlaceRanking, saveBracketMatches, saveManualOverride, loadBracketMatches, loadStandingsSnapshot, loadThirdPlaceRanking } from "./js/worldcup-admin.js?v=9";
 
     const ENABLE_SOFASCORE_SYNC = false;
@@ -1308,7 +1308,7 @@
 
       await saveStandingsSnapshot(db, standings);
       await saveThirdPlaceRanking(db, thirdPlaceRanking);
-      return { standings, thirdPlaceRanking };
+      return { standings, thirdPlaceRanking, resultsByMatchId };
     }
 
     document.getElementById("btn-recalculate-standings").addEventListener("click", async () => {
@@ -1343,12 +1343,13 @@
       setKnockoutStatus("Gerando mata-mata...", "info");
 
       try {
-        const { standings, thirdPlaceRanking } = await calculateAndSaveStandings();
+        const { standings, thirdPlaceRanking, resultsByMatchId } = await calculateAndSaveStandings();
         const thirdPlaceAssignments = getThirdPlaceAssignmentsForRanking(thirdPlaceRanking);
         const bracketTemplate = createBracketTemplate();
         const generatedBracket = resolveFixedSlots(bracketTemplate, standings, thirdPlaceAssignments);
         const existingBracket = await loadBracketMatches(db);
-        const bracket = mergeManualBracketOverrides(generatedBracket, existingBracket);
+        const mergedBracket = mergeManualBracketOverrides(generatedBracket, existingBracket);
+        const bracket = applyKnockoutResults(mergedBracket, resultsByMatchId);
 
         renderBracketReview(bracket);
         await saveBracketMatches(db, bracket);
