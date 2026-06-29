@@ -801,7 +801,79 @@ node --check /tmp/copa-admin-inline.js
 git diff --check
 ```
 
-### 25.11 Instrução obrigatória para futuras IAs/agentes
+### 25.11 Correções de produção: fechamento dos terceiros e reprocessamento de vencedores (2026-06-29)
+
+Relatório detalhado: `docs/relatorio-operacional-mata-mata-2026-06-29.md`.
+
+**Erro 1:** após o AdminSuper inserir os resultados faltantes da terceira rodada
+da fase de grupos, a combinação final dos melhores terceiros ficou
+`B/D/E/F/I/J/K/L`, mas nem todos os confrontos M73-M88 foram atualizados em
+`bracketMatches`. M79, M80, M82, M85 e M87 ainda tinham slots `TBD`/parciais.
+
+**Causa:** a opção oficial do Anexo C para `BDEFIJKL` ainda não estava
+codificada. O sistema deixava slots de terceiros pendentes por segurança quando
+não havia mapeamento explícito.
+
+**Solução:** commit `dde9b78 fix(mata-mata): completar terceiros`.
+
+- `js/worldcup-bracket.js`: adicionou a opção oficial `BDEFIJKL` em
+  `KNOWN_THIRD_PLACE_ASSIGNMENT_OPTIONS` e a função
+  `getThirdPlaceAssignmentsForRanking(thirdPlaceRanking)`.
+- `admin.html`: passou a calcular os encaixes dos terceiros a partir de
+  `thirdPlaceRanking/current`.
+- `tests/worldcup-bracket.test.mjs`: adicionou teste da combinação final e dos
+  16 confrontos da fase de 32.
+- Produção: `bracketMatches/79`, `/80`, `/82`, `/85` e `/87` foram corrigidos
+  diretamente no Firestore; M73-M88 ficaram todos definidos.
+
+**Erro 2:** após inserir `M73 = África do Sul 0 x 1 Canadá`, o resultado ficou
+gravado em `matches/match_73`, mas `bracketMatches/73` continuou sem
+`winner`/`loser` e `bracketMatches/90` continuou `TBD x TBD`.
+
+**Causa:** a propagação existia, mas dependia do momento em que o resultado era
+salvo. Se o admin estivesse com cache antigo ou se a propagação falhasse após
+gravar `matches`, o botão `Gerar/Atualizar Mata-Mata` não reaplicava resultados
+de mata-mata já existentes.
+
+**Solução:** commit `bfe8bd5 fix(mata-mata): reprocessar resultados`.
+
+- `js/worldcup-bracket.js`: adicionou
+  `applyKnockoutResults(bracket, resultsByMatchId)`, que percorre M73-M104 em
+  ordem e reaplica os resultados já salvos, usando `propagateKnockoutWinner`.
+- `admin.html`: `Gerar/Atualizar Mata-Mata` agora executa a cadeia
+  `resolveFixedSlots` -> `mergeManualBracketOverrides` ->
+  `applyKnockoutResults` -> `saveBracketMatches`.
+- `tests/worldcup-bracket.test.mjs`: cobre o caso Canadá no M73 e uma cadeia
+  até quartas, semi, final e terceiro lugar.
+- Produção: `bracketMatches/73` foi marcado `finished` com vencedor `Canadá` e
+  `bracketMatches/90` ficou `Canadá x TBD`, aguardando `W75`.
+
+**Onde paramos em produção:**
+
+```text
+M73: África do Sul 0 x 1 Canadá | finished | W73 = Canadá
+M90: Canadá x TBD | partially_defined | aguarda W75
+M97: TBD x TBD | pending | aguarda W89 e W90
+M101: TBD x TBD | pending | aguarda W97 e W98
+M103: TBD x TBD | pending | aguarda L101 e L102
+M104: TBD x TBD | pending | aguarda W101 e W102
+```
+
+Regra prática: o Canadá entrou corretamente no M90. Ele só deve entrar nas
+quartas se vencer M90, na semi se vencer M97 e na final se vencer M101. Se
+perder M101, entra no M103.
+
+**Validações executadas:**
+
+```bash
+node tests/worldcup-bracket.test.mjs
+node tests/worldcup-standings.test.mjs
+node --check js/worldcup-bracket.js
+node --check /tmp/copa-admin-inline.js
+git diff --check
+```
+
+### 25.12 Instrução obrigatória para futuras IAs/agentes
 
 Antes de diagnosticar ou negar capacidade neste projeto, a IA/agente deve:
 

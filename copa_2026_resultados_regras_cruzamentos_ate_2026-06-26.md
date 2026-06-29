@@ -335,3 +335,67 @@ Esta é a programação atual dos jogos da fase de 32 conforme os cruzamentos di
 - FIFA — regulamento oficial da Copa do Mundo FIFA 2026, PDF: [https://digitalhub.fifa.com/m/636f5c9c6f29771f/original/FWC2026_regulations_EN.pdf](https://digitalhub.fifa.com/m/636f5c9c6f29771f/original/FWC2026_regulations_EN.pdf "https://digitalhub.fifa.com/m/636f5c9c6f29771f/original/FWC2026_regulations_EN.pdf")  
 - FIFA — guia oficial sobre grupos, classificação e desempates: [https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/groups-how-teams-qualify-tie-breakers](https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/groups-how-teams-qualify-tie-breakers "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/groups-how-teams-qualify-tie-breakers")  
 - Checagens jornalísticas dos jogos finais do Grupo D em 25/06: Reuters, The Guardian e India Today.  
+
+**11. Adendo operacional — atualização de 2026-06-29**
+
+Este arquivo foi produzido originalmente com corte em 2026-06-26. Depois da
+inserção dos resultados faltantes da terceira rodada, a classificação da fase
+de grupos foi fechada e a combinação final dos oito melhores terceiros ficou:
+
+```text
+B/D/E/F/I/J/K/L
+```
+
+Pelo Anexo C do regulamento FIFA 2026, opção 67, essa combinação aloca os
+terceiros assim:
+
+```text
+1A x 3E -> M79: México x Equador
+1B x 3J -> M85: Suíça x Argélia
+1D x 3B -> M81: Estados Unidos x Bósnia e Herzegovina
+1E x 3D -> M74: Alemanha x Paraguai
+1G x 3I -> M82: Bélgica x Senegal
+1I x 3F -> M77: França x Suécia
+1K x 3L -> M87: Colômbia x Gana
+1L x 3K -> M80: Inglaterra x RD do Congo
+```
+
+Estado operacional da fase de 32 após a correção em produção:
+
+```text
+M73: África do Sul x Canadá
+M74: Alemanha x Paraguai
+M75: Holanda x Marrocos
+M76: Brasil x Japão
+M77: França x Suécia
+M78: Costa do Marfim x Noruega
+M79: México x Equador
+M80: Inglaterra x RD do Congo
+M81: Estados Unidos x Bósnia e Herzegovina
+M82: Bélgica x Senegal
+M83: Portugal x Croácia
+M84: Espanha x Áustria
+M85: Suíça x Argélia
+M86: Argentina x Cabo Verde
+M87: Colômbia x Gana
+M88: Austrália x Egito
+```
+
+Resultado já lançado em produção:
+
+```text
+M73: África do Sul 0 x 1 Canadá
+```
+
+Consequência no caminho do mata-mata:
+
+```text
+M90 = W73 x W75 = Canadá x TBD
+```
+
+O Canadá ainda não deve aparecer nas quartas, semifinais ou final. Ele só entra
+no M97 se vencer M90; só entra no M101 se vencer M97; e só entra na final M104
+se vencer M101. Se perder M101, entra no M103.
+
+Para detalhes do erro, correção e validações, ver
+`docs/relatorio-operacional-mata-mata-2026-06-29.md`.
