@@ -3,6 +3,7 @@ import {
   CONFIRMED_THIRD_PLACE_ASSIGNMENTS,
   createBracketTemplate,
   determineKnockoutWinner,
+  getThirdPlaceAssignmentsForRanking,
   propagateKnockoutWinner,
   resolveFixedSlots
 } from "../js/worldcup-bracket.js";
@@ -97,6 +98,64 @@ const jIncompleteRoundOf32 = resolveFixedSlots(createBracketTemplate(), jIncompl
 assert.equal(jIncompleteRoundOf32.find((match) => match.matchId === 86).homeTeam, "Argentina");
 assert.equal(jIncompleteRoundOf32.find((match) => match.matchId === 86).awayTeam, "Cabo Verde");
 assert.equal(jIncompleteRoundOf32.find((match) => match.matchId === 86).status, "defined");
+
+const finalThirdPlaceRanking = {
+  complete: true,
+  teams: [
+    { group: "K", team: "RD do Congo", qualified: true },
+    { group: "F", team: "Suecia", qualified: true },
+    { group: "E", team: "Equador", qualified: true },
+    { group: "L", team: "Gana", qualified: true },
+    { group: "B", team: "Bosnia", qualified: true },
+    { group: "J", team: "Argelia", qualified: true },
+    { group: "D", team: "Paraguai", qualified: true },
+    { group: "I", team: "Senegal", qualified: true },
+    { group: "G", team: "Ira", qualified: false },
+    { group: "A", team: "Coreia do Sul", qualified: false },
+    { group: "C", team: "Escocia", qualified: false },
+    { group: "H", team: "Uruguai", qualified: false }
+  ]
+};
+const finalThirdAssignments = getThirdPlaceAssignmentsForRanking(finalThirdPlaceRanking);
+const finalRoundOf32Standings = {
+  A: { complete: true, teams: [{ team: "Mexico", position: 1 }, { team: "Africa do Sul", position: 2 }, { team: "Coreia do Sul", position: 3 }] },
+  B: { complete: true, teams: [{ team: "Suica", position: 1 }, { team: "Canada", position: 2 }, { team: "Bosnia", position: 3 }] },
+  C: { complete: true, teams: [{ team: "Brasil", position: 1 }, { team: "Marrocos", position: 2 }, { team: "Escocia", position: 3 }] },
+  D: { complete: true, teams: [{ team: "Estados Unidos", position: 1 }, { team: "Australia", position: 2 }, { team: "Paraguai", position: 3 }] },
+  E: { complete: true, teams: [{ team: "Alemanha", position: 1 }, { team: "Costa do Marfim", position: 2 }, { team: "Equador", position: 3 }] },
+  F: { complete: true, teams: [{ team: "Holanda", position: 1 }, { team: "Japao", position: 2 }, { team: "Suecia", position: 3 }] },
+  G: { complete: true, teams: [{ team: "Belgica", position: 1 }, { team: "Egito", position: 2 }, { team: "Ira", position: 3 }] },
+  H: { complete: true, teams: [{ team: "Espanha", position: 1 }, { team: "Cabo Verde", position: 2 }, { team: "Uruguai", position: 3 }] },
+  I: { complete: true, teams: [{ team: "Franca", position: 1 }, { team: "Noruega", position: 2 }, { team: "Senegal", position: 3 }] },
+  J: { complete: true, teams: [{ team: "Argentina", position: 1 }, { team: "Austria", position: 2 }, { team: "Argelia", position: 3 }] },
+  K: { complete: true, teams: [{ team: "Colombia", position: 1 }, { team: "Portugal", position: 2 }, { team: "RD do Congo", position: 3 }] },
+  L: { complete: true, teams: [{ team: "Inglaterra", position: 1 }, { team: "Croacia", position: 2 }, { team: "Gana", position: 3 }] }
+};
+const finalRoundOf32 = resolveFixedSlots(createBracketTemplate(), finalRoundOf32Standings, finalThirdAssignments);
+const expectedFinalRoundOf32 = new Map([
+  [73, ["Africa do Sul", "Canada", "defined"]],
+  [74, ["Alemanha", "Paraguai", "defined"]],
+  [75, ["Holanda", "Marrocos", "defined"]],
+  [76, ["Brasil", "Japao", "defined"]],
+  [77, ["Franca", "Suecia", "defined"]],
+  [78, ["Costa do Marfim", "Noruega", "defined"]],
+  [79, ["Mexico", "Equador", "defined"]],
+  [80, ["Inglaterra", "RD do Congo", "defined"]],
+  [81, ["Estados Unidos", "Bosnia", "defined"]],
+  [82, ["Belgica", "Senegal", "defined"]],
+  [83, ["Portugal", "Croacia", "defined"]],
+  [84, ["Espanha", "Austria", "defined"]],
+  [85, ["Suica", "Argelia", "defined"]],
+  [86, ["Argentina", "Cabo Verde", "defined"]],
+  [87, ["Colombia", "Gana", "defined"]],
+  [88, ["Australia", "Egito", "defined"]]
+]);
+for (const [matchId, [homeTeam, awayTeam, status]] of expectedFinalRoundOf32) {
+  const match = finalRoundOf32.find((item) => item.matchId === matchId);
+  assert.equal(match.homeTeam, homeTeam, `final M${matchId} home`);
+  assert.equal(match.awayTeam, awayTeam, `final M${matchId} away`);
+  assert.equal(match.status, status, `final M${matchId} status`);
+}
 
 const manuallyEdited = createBracketTemplate();
 manuallyEdited[0] = {

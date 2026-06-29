@@ -20,6 +20,22 @@ export const CONFIRMED_THIRD_PLACE_ASSIGNMENTS = Object.freeze({
   "M86.home": "Argentina"
 });
 
+// FIFA Regulations 2026, Annex C, option 67:
+// the current final third-place set is B/D/E/F/I/J/K/L.
+// Columns are 1A, 1B, 1D, 1E, 1G, 1I, 1K, 1L.
+const KNOWN_THIRD_PLACE_ASSIGNMENT_OPTIONS = Object.freeze({
+  BDEFIJKL: Object.freeze({
+    "M79.away": "E",
+    "M85.away": "J",
+    "M81.away": "B",
+    "M74.away": "D",
+    "M82.away": "I",
+    "M77.away": "F",
+    "M87.away": "L",
+    "M80.away": "K"
+  })
+});
+
 // Horarios de Brasilia (UTC-03:00) conforme programacao oficial da FIFA
 // para a fase de 32 (secao 7 de copa_2026_resultados_regras_cruzamentos).
 // Horarios sem offset sao interpretados no fuso local do navegador; para
@@ -325,6 +341,20 @@ export function resolveFixedSlots(bracket, groupStandings, thirdPlaceAssignments
       status: resolveBracketStatus(match)
     };
   });
+}
+
+export function getThirdPlaceAssignmentsForRanking(thirdPlaceRanking) {
+  const qualifiedGroups = (thirdPlaceRanking?.teams || [])
+    .filter((team) => team.qualified === true && /^[A-L]$/.test(team.group || ""))
+    .map((team) => team.group)
+    .sort()
+    .join("");
+
+  const officialOption = KNOWN_THIRD_PLACE_ASSIGNMENT_OPTIONS[qualifiedGroups];
+  return {
+    ...CONFIRMED_THIRD_PLACE_ASSIGNMENTS,
+    ...(officialOption || {})
+  };
 }
 
 export function determineKnockoutWinner(matchResult, manualWinner = null) {
